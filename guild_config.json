@@ -1,0 +1,94 @@
+{
+  "1370026636182818927": {
+    "scam_channels": [
+      1373445613857013780
+    ],
+    "codehelper_channels": [],
+    "limited_role_id": null,
+    "surge_threshold_per_minute": 10,
+    "log_channel_id": 1373445613857013780,
+    "domain_allowlist": [
+      "discord.com",
+      "discord.gg",
+      "steamcommunity.com",
+      "github.com"
+    ],
+    "shortener_allowlist": [
+      "git.io"
+    ],
+    "auto_whitelist_on_false_positive": true,
+    "nitro_requires_url": true,
+    "phrase_allowlist": [],
+    "scam_user_whitelist": [],
+    "scam_role_whitelist": [
+      1374128947612090398
+    ],
+    "phrase_audit": {}
+  },
+  "1237992285447393351": {
+    "scam_channels": [],
+    "codehelper_channels": [],
+    "limited_role_id": null,
+    "surge_threshold_per_minute": 10,
+    "log_channel_id": null,
+    "domain_allowlist": [
+      "discord.com",
+      "discord.gg",
+      "steamcommunity.com",
+      "github.com"
+    ],
+    "shortener_allowlist": [
+      "git.io"
+    ],
+    "auto_whitelist_on_false_positive": true,
+    "nitro_requires_url": true,
+    "phrase_allowlist": [],
+    "scam_user_whitelist": [],
+    "scam_role_whitelist": [],
+    "phrase_audit": {}
+  },
+  "1378531838833725511": {
+    "scam_channels": [],
+    "codehelper_channels": [],
+    "limited_role_id": null,
+    "surge_threshold_per_minute": 10,
+    "log_channel_id": null,
+    "domain_allowlist": [
+      "discord.com",
+      "discord.gg",
+      "steamcommunity.com",
+      "github.com"
+    ],
+    "shortener_allowlist": [
+      "git.io"
+    ],
+    "auto_whitelist_on_false_positive": true,
+    "nitro_requires_url": true,
+    "phrase_allowlist": [],
+    "scam_user_whitelist": [],
+    "scam_role_whitelist": [],
+    "phrase_audit": {}
+  },
+  "1416610287884435618": {
+    "scam_channels": [],
+    "codehelper_channels": [],
+    "limited_role_id": null,
+    "surge_threshold_per_minute": 10,
+    "log_channel_id": null,
+    "domain_allowlist": [
+      "discord.com",
+      "discord.gg",
+      "steamcommunity.com",
+      "github.com"
+    ],
+    "shortener_allowlist": [
+      "git.io"
+    ],
+    "auto_whitelist_on_false_positive": true,
+    "nitro_requires_url": true,
+    "phrase_allowlist": [],
+    "scam_user_whitelist": [],
+    "scam_role_whitelist": [],
+    "phrase_audit": {}
+  }
+}
