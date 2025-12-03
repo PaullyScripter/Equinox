@@ -1,0 +1,35 @@
+{
+  "user": [
+    {
+      "userid": 1237992032715280385,
+      "inventory": [
+        {
+          "Epic": 1,
+          "Uncommon": 3,
+          "Rare": 3,
+          "Common": 2,
+          "Paully": 1,
+          "Trio Charm": 1
+        }
+      ],
+      "roll": 69696969
+    },
+    {
+      "userid": 857932717681147954,
+      "inventory": [
+        {
+          "Uncommon": 6,
+          "Me When Im Lucky": 8,
+          "Trio Charm": 992,
+          "Legendary": 2,
+          "Paully": 2,
+          "Common": 2,
+          "Samantha": 1
+        }
+      ],
+      "roll": 13,
+      "email": "bquoc6834@gmail.com",
+      "eligible": true
+    }
+  ]
+}

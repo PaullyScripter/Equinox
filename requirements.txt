@@ -1,0 +1,11 @@
+discord.py
+aiohttp
+qrcode[pil]
+Pillow
+requests
+PyDictionary
+googletrans==4.0.0-rc1
+wikipedia
+matplotlib
+numpy
+captcha

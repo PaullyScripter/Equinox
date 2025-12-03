@@ -1,0 +1,47 @@
+{
+    "1237992285447393351": {
+        "test": {
+            "description": "Choose your restock ping!!",
+            "color": "#000000",
+            "roles": [
+                {
+                    "id": "1389094439061946408",
+                    "name": "sugar apple",
+                    "emoji": "\ud83c\udf4e"
+                },
+                {
+                    "id": "1389094471093981275",
+                    "name": "ember lily",
+                    "emoji": "\ud83c\udf4e"
+                },
+                {
+                    "id": "1389094512986423448",
+                    "name": "mushroom",
+                    "emoji": "\ud83c\udf4e"
+                }
+            ]
+        }
+    },
+    "1370026636182818927": {
+        "test": {
+            "description": "Choose your role!",
+            "color": "#ffffff",
+            "roles": []
+        },
+        "test1": {
+            "description": "Choose your role!",
+            "color": "#ffffff",
+            "roles": []
+        },
+        "test2": {
+            "description": "Choose your role!",
+            "color": "#ffffff",
+            "roles": []
+        },
+        "test6": {
+            "description": "Choose your role!",
+            "color": "#ffffff",
+            "roles": []
+        }
+    }
+}
