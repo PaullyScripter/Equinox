@@ -122,7 +122,7 @@ def check(interaction: discord.Interaction, m):
 class BuyPremium2(View):
   def __init__(self):
     super().__init__(timeout=None)
-    button = discord.ui.Button(label='Buy Premium', style=discord.ButtonStyle.url, url='https://discord.gg/Cu8JR7Vsvx')
+    button = discord.ui.Button(label='Buy Premium', style=discord.ButtonStyle.url, url='https://equinoxbot.netlify.app')
     self.add_item(button)
 
 @client.tree.error
@@ -2039,7 +2039,7 @@ async def shop(interaction: discord.Interaction):
 class BuyPremium(View):
   def __init__(self):
     super().__init__(timeout=60)
-    button = discord.ui.Button(label='Buy Premium', style=discord.ButtonStyle.url, url='https://discord.gg/Cu8JR7Vsvx')
+    button = discord.ui.Button(label='Buy Premium', style=discord.ButtonStyle.url, url='https://equinoxbot.netlify.app')
     self.add_item(button)
 
 
@@ -3707,7 +3707,7 @@ class DelTicketModal(ui.Modal):
 class DeleteTicketSystemButton(discord.ui.View):
   def __init__(self):
     super().__init__(timeout=15)
-    button = discord.ui.Button(label='Buy Premium', style=discord.ButtonStyle.url, url='https://discord.gg/Cu8JR7Vsvx')
+    button = discord.ui.Button(label='Buy Premium', style=discord.ButtonStyle.url, url='https://equinoxbot.netlify.app')
     self.add_item(button)
   @discord.ui.button(label="Delete ticket system", style=discord.ButtonStyle.red, custom_id="deletetticketsystem")
   async def deletetticketsystem(self, interaction: discord.Interaction, Button: discord.Button):
@@ -3735,7 +3735,7 @@ class DeleteTicketButton(discord.ui.View):
 class BuyPremium2(View):
   def __init__(self):
     super().__init__(timeout=None)
-    button = discord.ui.Button(label='Buy Premium', style=discord.ButtonStyle.url, url='https://discord.gg/Cu8JR7Vsvx')
+    button = discord.ui.Button(label='Buy Premium', style=discord.ButtonStyle.url, url='https://equinoxbot.netlify.app')
     self.add_item(button)
 
 def is_number(data):
