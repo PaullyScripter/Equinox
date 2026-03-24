@@ -34,34 +34,28 @@ import matplotlib.pyplot as plt
 plt.set_loglevel("critical")
 import numpy
 import io
-from captcha.image import ImageCaptcha                             
+from captcha.image import ImageCaptcha  # Secure captcha generation
 from discord.ext import tasks
 from typing import Literal
 from discord.utils import format_dt
 import os, re, json, ast, time, uuid, string
 from collections import deque, defaultdict
 from typing import Dict, Any, List, Tuple
-from typing import Optional, Literal
+from typing import Optional, Literal, Tuple, Any
 import matplotlib.pyplot as plt
 from io import BytesIO
 import httpx
+import asyncpg
 from dotenv import load_dotenv
 load_dotenv()
-
-API_KEY = os.getenv("API_KEY")
-ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-email_password = os.getenv("email_password")
-email_sender = os.getenv("email_sender")
-
 intents = discord.Intents.default()
 
-intents.members = True                      
+intents.members = True            # Approved
 intents.message_content = True
-intents.presences = True              
+intents.presences = True    # Approved
 
-                        
-                                         
+# Do NOT enable presence
+# intents.presences = True  ❌ (leave off)
 
 client = commands.Bot(
     command_prefix="/",
@@ -81,7 +75,7 @@ class PersistentViewBot(commands.Bot):
     super().__init__(command_prefix=commands.when_mentioned_or('/'), intents=discord.Intents.all())
     self.http_session = None
   async def setup_hook(self) -> None:
-    self.http_session = ClientSession()
+    self.http_session = aiohttp.ClientSession()
     self.add_view(TicketButton())
     self.add_view(DeleteTicketButton())
     self.add_view(VerifyButton())
@@ -91,10 +85,10 @@ class PersistentViewBot(commands.Bot):
     self.add_view(rrSelectPing())
     self.add_view(rrSelectServer())
     self.add_view(PromptButtonView()) 
-
   async def close(self):
-      await self.http_session.close()
-      await super().close()
+    if self.http_session is not None and not self.http_session.closed:
+        await self.http_session.close()
+    await super().close()
 
 STATS_FILE = "command_stats.json"
 devs = [
@@ -102,7 +96,7 @@ devs = [
     1430719406022983740,
     661033986742550548,
 ]
-IGNORED_USER_IDS = set(devs)                                       
+IGNORED_USER_IDS = set(devs)  # devs should already be a list/tuple
 
 
 class ReactionRoleView(discord.ui.View):
@@ -112,12 +106,12 @@ class ReactionRoleView(discord.ui.View):
 
 client = PersistentViewBot()
 
-                                                                                            
+########################################## MODELS ##########################################
 
 def check(interaction: discord.Interaction, m):
   return m.author.id == interaction.user.id
 
-                                                                             
+################################ Global Code ################################
 
 class BuyPremium2(View):
   def __init__(self):
@@ -149,7 +143,7 @@ async def on_app_command_error(interaction, error):
   else:
     raise error
 
-                                                                                 
+################################ Whitelist Model ################################
 
 devs = [857932717681147954, 953211569150525480, 886238665297264660]
 
@@ -177,7 +171,7 @@ def refresh():
     yearly_data = read_json("yearlycode")
     client.yearly_codes = yearly_data.get("yearlycodes", [])
 
-                          
+    # lifetime codes cache
     try:
         lifetime_data = read_json("lifetimecode")
     except FileNotFoundError:
@@ -185,25 +179,69 @@ def refresh():
         write_json(lifetime_data, "lifetimecode")
     client.lifetime_codes = lifetime_data.get("lifetimecodes", [])
 
-                                                                                  
+    # if you’re still keeping the legacy user lists in memory, you can keep these:
     monthly_user_data = read_json("monthly_user")
     client.monthly_user = monthly_user_data.get("monthly_users", [])
 
     yearly_user_data = read_json("yearly_user")
     client.yearly_user = yearly_user_data.get("yearly_users", [])
 
-async def is_premium(discord_id: int):
-    try:
-        async with httpx.AsyncClient() as client:
-            res = await client.get(f"{BACKEND_URL}/api/premium/{discord_id}")
-            res.raise_for_status()
-            data = res.json()
-            return data.get("premium", False), data.get("tier"), data.get("expires_at")
-    except Exception as e:
-        print("Error checking premium:", e)
+
+
+_db_pool: Optional[asyncpg.Pool] = None
+
+async def init_db_pool(min_size: int = 1, max_size: int = 5) -> None:
+    global _db_pool
+    if _db_pool is not None:
+        return
+
+    ssl_ctx = ssl.create_default_context()
+    _db_pool = await asyncpg.create_pool(
+        dsn=os.getenv["DATABASE_URL"],
+        min_size=min_size,
+        max_size=max_size,
+        ssl=ssl_ctx,
+    )
+
+async def is_premium(discord_id: int) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Mirrors db_user_is_active():
+    returns (active, tier, expires_at_iso_or_none)
+    """
+    if _db_pool is None:
+        raise RuntimeError("DB pool not initialized. Call init_db_pool() at startup.")
+
+    now = datetime.now(timezone.utc)
+
+    async with _db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT tier, expires_at
+            FROM public.user_subscriptions
+            WHERE discord_id = $1
+            ORDER BY redeemed_at DESC
+            LIMIT 1
+            """,
+            discord_id,  # int is fine if column is bigint
+        )
+
+    if not row:
         return False, None, None
 
-MONTH_DAYS = 30                                              
+    tier = row["tier"]
+    expires = row["expires_at"]  # datetime or None
+
+    # normalize tz (extra safety, mirrors your backend)
+    if expires is not None and getattr(expires, "tzinfo", None) is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+
+    if tier == "lifetime" or expires is None:
+        return True, tier, None
+
+    active = expires > now
+    return active, tier, expires.isoformat()
+
+MONTH_DAYS = 30          # tune if you prefer calendar months
 YEAR_DAYS  = 365
 SUB_FILES = {
     "monthly":  "monthly_user.json",
@@ -216,7 +254,7 @@ def utcnow_iso():
 
 def load_json(path):
     if not os.path.exists(path):
-                                               
+        # initialize with schema: {"users": []}
         with open(path, "w", encoding="utf-8") as f:
             json.dump({"users": []}, f, indent=2)
     with open(path, "r", encoding="utf-8") as f:
@@ -227,9 +265,9 @@ def save_json(path, data):
         json.dump(data, f, indent=2)
 
 def _duration_days(tier: str) -> int | None:
-    if tier == "monthly":  return 30                                            
+    if tier == "monthly":  return 30        # or use calendar math if you prefer
     if tier == "yearly":   return 365
-    if tier == "lifetime": return None                     
+    if tier == "lifetime": return None      # never expires
     return None
 
 def _expires_at_for(tier: str, started_at_iso: str) -> str | None:
@@ -240,10 +278,10 @@ def _expires_at_for(tier: str, started_at_iso: str) -> str | None:
     return (started + timedelta(days=days)).isoformat()
 
 def _ensure_objects_schema(file_path: str, legacy_key: str):
-\
-\
-\
-       
+    """
+    Migrates legacy files that were arrays of IDs into {"users":[{user_id,started_at,expires_at}]}
+    legacy_key is e.g. 'monthly_users' or 'yearly_users'.
+    """
     with open(file_path, "r", encoding="utf-8") as f:
         raw = json.load(f)
     if isinstance(raw, dict) and legacy_key in raw and isinstance(raw[legacy_key], list):
@@ -251,9 +289,9 @@ def _ensure_objects_schema(file_path: str, legacy_key: str):
         save_json(file_path, migrated)
         return migrated
     if isinstance(raw, dict) and "users" in raw and isinstance(raw["users"], list):
-                            
+        # already new schema
         return raw
-                              
+    # raw array (super legacy)
     if isinstance(raw, list):
         migrated = {"users": [{"user_id": uid, "started_at": utcnow_iso(), "expires_at": None} for uid in raw]}
         save_json(file_path, migrated)
@@ -262,15 +300,15 @@ def _ensure_objects_schema(file_path: str, legacy_key: str):
 
 def add_subscription(user_id: int, tier: str, code: str):
     file_path = SUB_FILES[tier]
-                       
+    # migrate if needed
     legacy_key = f"{tier}_users"
     data = _ensure_objects_schema(file_path, legacy_key)
-                               
+    # de-dupe: update if exists
     now_iso = utcnow_iso()
     exp_iso = _expires_at_for(tier, now_iso)
     found = next((u for u in data["users"] if u.get("user_id") == user_id), None)
     if found:
-                                                      
+        # renew: start now and push expiry accordingly
         found["started_at"] = now_iso
         found["expires_at"] = exp_iso
         found["code"] = code
@@ -291,7 +329,7 @@ def remove_subscription(user_id: int, tier: str):
 
 
 def _coerce_dt(dt_val):
-                                                                        
+    """Accept ISO string or datetime and return aware datetime (UTC)."""
     if dt_val is None:
         return None
     if isinstance(dt_val, datetime):
@@ -305,39 +343,15 @@ def _fmt_expiry(expires_at):
     dt = _coerce_dt(expires_at)
     if not dt:
         return "Never"
-                                            
+    # Absolute + relative (e.g., in 27 days)
     try:
         return f"{dt.isoformat()} ({discord.utils.format_dt(dt, style='R')})"
     except Exception:
         return dt.isoformat()
 
-                                        
-                                                                                                                    
-def user_is_active(user_id: int):
-\
-\
-\
-       
-    now = datetime.now(timezone.utc)
+# Fallback if you don’t already have it:
+# expects SUB_FILES like {"monthly":"monthly_user.json","yearly":"yearly_user.json","lifetime":"lifetime_user.json"}
 
-    for tier, path in SUB_FILES.items():                                                    
-        data = load_json(path)
-        for u in data.get("users", []):
-            if str(u.get("user_id")) == str(user_id):
-                exp_raw = u.get("expires_at")
-
-                                       
-                if exp_raw in (None, "", "null"):
-                    return True, tier, None
-
-                dt = _coerce_dt(exp_raw)
-                if dt and dt > now:
-                    return True, tier, dt                    
-                else:
-                    return False, tier, dt                     
-
-                                
-    return False, None, None
 
 CODE_FILES: dict[str, str | tuple[str, str]] = {
     "monthly":  ("monthcode",   "monthlycodes"),
@@ -354,10 +368,10 @@ def code_key_for_tier(tier: str) -> str:
     return {"monthly": "monthlycodes", "yearly": "yearlycodes", "lifetime": "lifetimecodes"}[tier]
 
 def resolve_code_store(tier: str) -> tuple[str, str]:
-\
-\
-\
-       
+    """
+    Returns (file_stub, json_key) for the tier.
+    file_stub is used with your read_json/write_json helpers (which append .json).
+    """
     entry = CODE_FILES.get(tier)
     if entry is None:
         raise ValueError(f"Unknown tier: {tier}")
@@ -365,15 +379,15 @@ def resolve_code_store(tier: str) -> tuple[str, str]:
         if len(entry) < 2:
             raise ValueError(f"CODE_FILES[{tier}] tuple must be (file_stub, key)")
         return str(entry[0]), str(entry[1])
-                               
+    # string -> use default key
     return str(entry), DEFAULT_CODE_KEYS[tier]
 
 def _random_code() -> str:
-                                                          
+    # XXXX-XXXX-XXXX-XXXX using your existing `char1` pool
     return "-".join("".join(random.choice(char1) for _ in range(4)) for __ in range(4))
 
 def replenish_codes(tier: str, count: int = 5) -> list[str]:
-                                                                         
+    """Generate `count` unique codes for the given tier and save them."""
     file_stub, key = resolve_code_store(tier)
 
     data = read_json(file_stub)
@@ -389,7 +403,7 @@ def replenish_codes(tier: str, count: int = 5) -> list[str]:
     data[key] = list(existing)
     write_json(data, file_stub)
 
-                                                                                           
+    # refresh in-memory cache for that tier (monthly_codes / yearly_codes / lifetime_codes)
     setattr(client, f"{tier}_codes", data[key])
     return new_codes
 
@@ -435,7 +449,7 @@ def _log_command(user_id: int, command_name: str) -> None:
     save_stats(data)
 
 
-                                                                                            
+########################################## EVENTS ##########################################
 
 client.ticket_configs = {}
 
@@ -447,14 +461,15 @@ async def on_ready():
     )
     client.add_view(ScamFeedbackView(action_id="dummy"))
 
-               
+    # sync cmds
+    await init_db_pool(min_size=1, max_size=5)
     try:
         synced = await client.tree.sync()
         print(f"Synced {len(synced)} command(s)")
     except Exception as e:
         print(f"Error syncing commands: {e}")
 
-                                                                        
+    # -------- refresh code pools (monthly / yearly / lifetime) --------
     monthly_data      = await asyncio.to_thread(read_json, "monthcode")
     yearly_data       = await asyncio.to_thread(read_json, "yearlycode")
     try:
@@ -467,20 +482,20 @@ async def on_ready():
     client.yearly_codes   = yearly_data.get("yearlycodes", [])
     client.lifetime_codes = lifetime_data.get("lifetimecodes", [])
 
-                                                          
+    # (legacy lists – keep only if you still rely on them)
     monthly_user_data = await asyncio.to_thread(read_json, "monthly_user")
     yearly_user_data  = await asyncio.to_thread(read_json, "yearly_user")
     client.monthly_user = monthly_user_data.get("monthly_users", [])
     client.yearly_user  = yearly_user_data.get("yearly_users", [])
 
-                                                                               
+    # -------- OPTIONAL: top up codes if you insist on auto-generating --------
     async def generate_codes(filename: str, key: str, existing: list[str], target_min: int = 5):
         if len(existing) >= target_min:
             return
         data = await asyncio.to_thread(read_json, filename)
         need = target_min - len(existing)
         for _ in range(need):
-                                 
+            # XXXX-XXXX-XXXX-XXXX
             code = "-".join("".join(random.choice(char1) for _ in range(4)) for __ in range(4))
             data.setdefault(key, []).append(code)
         await asyncio.to_thread(write_json, data, filename)
@@ -488,18 +503,13 @@ async def on_ready():
     await asyncio.gather(
         generate_codes("monthcode", "monthlycodes", client.monthly_codes),
         generate_codes("yearlycode", "yearlycodes", client.yearly_codes),
-        generate_codes("lifetimecode", "lifetimecodes", client.lifetime_codes),                                               
+        generate_codes("lifetimecode", "lifetimecodes", client.lifetime_codes),  # only if you want lifetime pre-generated too
     )
 
-                                                     
-    if not prune_expired_subs.is_running():
-        prune_expired_subs.start()                                                          
-    if not monitor_confirmations.is_running():
-        monitor_confirmations.start()
 
     print("Equinox is here!")
 
-                                           
+    # (your persistent reaction-role views)
     data = load_data()
     for template_name, templates in data.items():
         for name, template in templates.items():
@@ -508,7 +518,9 @@ async def on_ready():
                 view = ReactionRoleView(template['roles'], custom_id)
                 client.add_view(view)
 
-
+@client.event
+async def on_close():
+    await close_db_pool()
 
 def get_guild_giveaway_path(guild_id: int) -> str:
     return f"giveawayFolder/giveaways_{guild_id}.json"
@@ -551,19 +563,19 @@ class GiveawayView(View):
         self.host_ids = giveaway_data["hosts"]
         self.role_ids = giveaway_data["roles"]
         self.original_winner = None
-        self.previous_winners = set()                                               
+        self.previous_winners = set()  # Tracks original winner and rerolled winners
         self.winner_message_id = None
         self.giveaway_ended = False
-        self.timer_task = None                                    
+        self.timer_task = None  # Ensure timer_task is initialized
 
 
 
     async def check_host_permission(self, interaction):
-                                                                      
+        """Check if the user is a host (either by user ID or role)."""
         if interaction.user.id in self.host_ids:
             return True
         
-                                                                        
+        # Check if the user has one of the roles specified as host roles
         member = interaction.guild.get_member(interaction.user.id)
         if member:
             for role_id in self.role_ids:
@@ -573,20 +585,20 @@ class GiveawayView(View):
         return False
 
     async def start_timer(self):
-                                                                
+        """Starts a timer to check if the giveaway has ended."""
         try:
             while True:
                 current_time = datetime.now(timezone.utc)
                 if current_time >= self.end_time:
-                    await self.end_giveaway()                              
+                    await self.end_giveaway()  # No interaction passed here
                     break
-                await asyncio.sleep(1)              
+                await asyncio.sleep(1)  # or even 30
         except asyncio.CancelledError:
-                                                     
+            # Handle the task cancellation gracefully
             pass
 
     async def end_giveaway(self, interaction: Optional[discord.Interaction] = None):
-                                                 
+        """Handles the ending of the giveaway."""
         if interaction:
             await interaction.response.defer()
             if not await self.check_host_permission(interaction):
@@ -639,14 +651,14 @@ class GiveawayView(View):
         save_guild_giveaways(guild_id, giveaways)
 
 
-                                                                        
+        # Update the original message to indicate the giveaway has ended
         embed = self.message.embeds[0]
         embed.set_footer(text="Status: Ended")
         await self.message.edit(embed=embed)
 
 
     async def reroll(self, interaction: discord.Interaction):
-                                         
+        """Handles rerolling a winner."""
         await interaction.response.defer()
         if not await self.check_host_permission(interaction):
             await interaction.followup.send("You do not have permission to reroll the winner.", ephemeral=True)
@@ -661,12 +673,12 @@ class GiveawayView(View):
             )
             return
 
-                                                      
+        # Disable buttons on the previous winner embed
         try:
-            if self.winner_message_id:                                            
+            if self.winner_message_id:  # Ensure we have a previous winner message
                 prev_message = await interaction.channel.fetch_message(self.winner_message_id)
                 if prev_message and prev_message.components:
-                                                                 
+                    # Create a new view with all buttons disabled
                     disabled_view = View()
                     for component in prev_message.components[0].children:
                         component.disabled = True
@@ -675,57 +687,57 @@ class GiveawayView(View):
         except Exception as e:
             print(f"Error disabling buttons on previous winner embed: {e}")
 
-                                                          
+        # Exclude all past winners (original and rerolled)
         eligible_entries = [entry for entry in self.entries if entry not in self.previous_winners]
 
         if not eligible_entries:
             await interaction.followup.send("No eligible entries left for rerolling.", ephemeral=True)
             return
 
-                                                                 
+        # Select a new winner from the remaining eligible entries
         new_winner_id = random.choice(eligible_entries)
         new_winner = self.client.get_user(new_winner_id)
 
         if new_winner:
-            self.previous_winners.add(new_winner_id)                                     
+            self.previous_winners.add(new_winner_id)  # Add the new winner to the history
 
-                                                    
+            # Create a new winner announcement embed
             embed = discord.Embed(title="New Winner", color=0xffffff)
             embed.add_field(name="", value=f"<a:snow:1311099641932152903> **Prize:** {self.giveaway_data['prize']}", inline=False)
 
-                                                                
+            # Create a new view with Reroll and Finalize buttons
             winner_view = View()
 
-                           
+            # Reroll button
             reroll_button = Button(label="Reroll", style=discord.ButtonStyle.primary)
             async def reroll_button_callback(interaction: discord.Interaction):
                 await self.reroll(interaction)
             reroll_button.callback = reroll_button_callback
 
-                                    
+            # Finalize Winner button
             finalize_button = Button(label="Finalize Winner", style=discord.ButtonStyle.secondary)
             async def finalize_button_callback(interaction: discord.Interaction):
                 await self.finalize_winner(interaction)
             finalize_button.callback = finalize_button_callback
 
-                                     
+            # Add buttons to the view
             winner_view.add_item(reroll_button)
             winner_view.add_item(finalize_button)
             embed.add_field(name="", value=f"<a:snow:1311099641932152903> **Winner:** {new_winner.mention}", inline=False)
 
-                                              
+            # Send the new winner announcement
             winner_message = await interaction.followup.send(
                 f"Congratulations {new_winner.mention}! You are the new winner of the giveaway!",
                 embed=embed,
                 view=winner_view
             )
-            self.winner_message_id = winner_message.id                            
+            self.winner_message_id = winner_message.id  # Update winner message ID
         else:
             await interaction.followup.send("The new winner could not be found.", ephemeral=True)
 
     async def finalize_winner(self, interaction: discord.Interaction):
         messageExist = True
-                                                                             
+        """Finalize the winner and remove the giveaway from the JSON file."""
         await interaction.response.defer()
 
         if not await self.check_host_permission(interaction):
@@ -741,7 +753,7 @@ class GiveawayView(View):
             )
             return
 
-                                                                       
+        # ✅ Ensure self.message is set to the original giveaway message
         if not self.message:
             try:
                 self.message = await interaction.channel.fetch_message(self.giveaway_data["message_id"])
@@ -749,15 +761,15 @@ class GiveawayView(View):
                 messageExist = False
                 pass
 
-                                           
+        # Remove winner interaction buttons
         if self.winner_message_id:
             try:
                 winner_message = await interaction.channel.fetch_message(self.winner_message_id)
                 await winner_message.edit(view=None)
             except Exception:
-                pass                                         
+                pass  # Silent fail if winner message is gone
 
-                                                               
+        # ✅ Now safe to remove from JSON using original message
         guild_id = interaction.guild_id if interaction.guild else self.giveaway_data.get("guild_id")
         remove_guild_giveaway(guild_id, self.giveaway_data["message_id"])
 
@@ -775,7 +787,7 @@ class GiveawayView(View):
 
 
     async def enter(self, interaction: discord.Interaction):
-                                                             
+        """Handles the entry or removal from the giveaway."""
         await interaction.response.defer()
         user_id = interaction.user.id
         guild_id = interaction.guild.id
@@ -787,7 +799,7 @@ class GiveawayView(View):
             self.entries.remove(user_id)
             self.giveaway_data["entries"] = list(self.entries)
 
-                         
+            # Update JSON
             giveaways[message_id]["entries"] = list(self.entries)
             save_guild_giveaways(guild_id, giveaways)
 
@@ -799,7 +811,7 @@ class GiveawayView(View):
         self.entries.add(user_id)
         self.giveaway_data["entries"] = list(self.entries)
 
-                     
+        # Update JSON
         giveaways[message_id]["entries"] = list(self.entries)
         save_guild_giveaways(guild_id, giveaways)
 
@@ -816,7 +828,7 @@ class GiveawayView(View):
 
 
     async def cancel_giveaway(self, interaction: discord.Interaction):
-                                                   
+        """Handles cancellation of the giveaway."""
         if not await self.check_host_permission(interaction):
             await interaction.response.send_message("You do not have permission to cancel this giveaway.", ephemeral=True)
             return
@@ -825,76 +837,76 @@ class GiveawayView(View):
             await interaction.response.send_message("This giveaway has already been ended or canceled.", ephemeral=True)
             return
 
-                                    
+        # Mark the giveaway as ended
         self.giveaway_ended = True
 
-                                          
+        # Cancel the timer if it's running
         if self.timer_task is not None and not self.timer_task.done():
             self.timer_task.cancel()
             self.timer_task = None
 
 
-                             
+        # Disable all buttons
         self.disable_buttons()
 
-                                   
+        # Announce the cancellation
         await interaction.response.send_message("The giveaway has been successfully canceled.")
         
-                                                                     
+        # Update the giveaway message footer to indicate cancellation
         embed = self.message.embeds[0]
         embed.set_footer(text=f"Status: Canceled")
         await self.message.edit(embed=embed)
 
-                                                
+        # Remove the giveaway from the JSON file
         remove_guild_giveaway(interaction.guild_id, self.message.id)
 
 
     def disable_buttons(self):
-                                              
+        """Disable all buttons in the view."""
         for item in self.children:
             item.disabled = True
 
-                                                     
+        # Update the view to reflect disabled buttons
         asyncio.run_coroutine_threadsafe(self.message.edit(view=self), self.client.loop)
 
     def disable_buttons(self):
-                                              
+        """Disable all buttons in the view."""
         for item in self.children:
             item.disabled = True
 
-                                                     
+        # Update the view to reflect disabled buttons
         asyncio.run_coroutine_threadsafe(self.message.edit(view=self), self.client.loop)
 
     async def stop_button_callback(self, interaction: discord.Interaction):
-                                                    
+        """Callback for the Stop Giveaway button."""
         if not await self.check_host_permission(interaction):
             await interaction.response.send_message("You do not have permission to stop this giveaway.", ephemeral=True)
             return
 
-        await self.end_giveaway(interaction)                              
+        await self.end_giveaway(interaction)  # Manually stop the giveaway
 
     async def cancel_button_callback(self, interaction: discord.Interaction):
-                                                      
+        """Callback for the Cancel Giveaway button."""
         await self.cancel_giveaway(interaction)
 
     async def initialize_giveaway(self):
-                                                          
-        self.timer_task = asyncio.create_task(self.start_timer())                        
+        """Initialize the giveaway and start the timer."""
+        self.timer_task = asyncio.create_task(self.start_timer())  # Start the timer task
 
 class WinnerButtonView(View):
-    def __init__(self, giveaway_view: GiveawayView, timeout: float = 86400):                    
+    def __init__(self, giveaway_view: GiveawayView, timeout: float = 86400):  # 24 hours timeout
         super().__init__(timeout=timeout)
         self.giveaway_view = giveaway_view
-        self.message = None                                  
+        self.message = None  # This will be set after sending
 
-                       
+        # Reroll button
         reroll_button = Button(label="Reroll", style=discord.ButtonStyle.primary)
         async def reroll_button_callback(interaction: discord.Interaction):
             await self.giveaway_view.reroll(interaction)
         reroll_button.callback = reroll_button_callback
         self.add_item(reroll_button)
 
-                                
+        # Finalize Winner button
         finalize_button = Button(label="Finalize Winner", style=discord.ButtonStyle.secondary)
         async def finalize_button_callback(interaction: discord.Interaction):
             await self.giveaway_view.finalize_winner(interaction)
@@ -971,11 +983,11 @@ async def giveaway(interaction: discord.Interaction, duration: str, prize: str, 
     ensure_guild_json_file(guild_id)
     giveaways = load_guild_giveaways(guild_id)
 
-                                             
-    is_active, is_premium, expires_at = user_is_active(interaction.user.id)
+    # Check premium status and giveaway count
+    active, tier, expires = await is_premium(interaction.user.id)
     active_giveaways = [g for g in giveaways.values() if g.get("message_id")]
 
-    if not is_premium and len(active_giveaways) >= 3:
+    if not active and len(active_giveaways) >= 3:
         embed = discord.Embed(
             title="You are being restricted",
             description="Normal servers can only host **3 active giveaways**.\n"
@@ -1002,7 +1014,7 @@ async def giveaway(interaction: discord.Interaction, duration: str, prize: str, 
         return await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 
-                    
+    # Parse duration
     duration_mapping = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
     total_seconds = 0
     parts = duration.split()
@@ -1024,7 +1036,7 @@ async def giveaway(interaction: discord.Interaction, duration: str, prize: str, 
 
     end_time = datetime.now(timezone.utc) + timedelta(seconds=total_seconds)
 
-                    
+    # Parse host IDs
     host_ids = [interaction.user.id]
     role_ids = []
     if hosts:
@@ -1041,7 +1053,7 @@ async def giveaway(interaction: discord.Interaction, duration: str, prize: str, 
             except ValueError:
                 return await interaction.followup.send(f"Invalid ID format: {host_id}", ephemeral=True)
 
-                          
+    # Create giveaway data
     giveaway_data = {
         "prize": prize,
         "hosts": host_ids,
@@ -1058,7 +1070,7 @@ async def giveaway(interaction: discord.Interaction, duration: str, prize: str, 
     embed.add_field(name="", value=f"<a:snow:1311099641932152903> **Ends in:** <t:{int(end_time.timestamp())}:R>", inline=False)
     embed.add_field(name="", value=f"<a:snow:1311099641932152903> **Ends on:** <t:{int(end_time.timestamp())}:F>", inline=False)
 
-                   
+    # Mention hosts
     host_mentions = [interaction.user.mention]
     for host_id in host_ids[1:]:
         user = interaction.guild.get_member(host_id)
@@ -1115,7 +1127,7 @@ async def giveaway_console(interaction: discord.Interaction):
         )
 
     giveaway_list = list(giveaways.values())
-    giveaway_list.sort(key=lambda g: g["end_time"])                    
+    giveaway_list.sort(key=lambda g: g["end_time"])  # Sort by end time
 
     def format_embed(start_idx: int):
         embed = discord.Embed(
@@ -1131,11 +1143,11 @@ async def giveaway_console(interaction: discord.Interaction):
             time_left = f"<t:{int(end_time.timestamp())}:R>"
             ends_on = f"<t:{int(end_time.timestamp())}:F>"
 
-                                                          
+                        # Determine proper giveaway status
             now = datetime.now(datetime.timezone.utc)
             end_time = datetime.strptime(g["end_time"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
 
-                                                             
+            # Base status on time and giveaway_data["status"]
             stored_status = g.get("status", "On Going / Winner not revealed")
 
             if now >= end_time:
@@ -1147,7 +1159,7 @@ async def giveaway_console(interaction: discord.Interaction):
 
             msg_url = f"https://discord.com/channels/{guild_id}/{interaction.channel.id}/{message_id}"
 
-                                 
+            # Build host mentions
             host_mentions = []
             for uid in g["hosts"]:
                 user = interaction.guild.get_member(uid)
@@ -1273,7 +1285,7 @@ async def on_member_join(member):
             except discord.Forbidden:
                 continue
             
-                                
+        # 🔽 Auto-Role Assignment
     autorole_id = load_autorole(guild.id)
     if autorole_id:
         role = guild.get_role(autorole_id)
@@ -1343,7 +1355,7 @@ async def autorole(interaction: discord.Interaction, action: app_commands.Choice
         if autorole_id:
             return await interaction.response.send_message("Auto-role already set. Remove it first to change.", ephemeral=True)
 
-                                      
+        # Check hierarchy unless owner
         if interaction.user.id != guild.owner_id:
             if role >= interaction.user.top_role:
                 return await interaction.response.send_message("⚠️ You can't assign a role higher than or equal to your top role.", ephemeral=True)
@@ -1409,16 +1421,16 @@ async def on_message(message):
   data["users"][user_id] = data["users"].get(user_id, 0) + 1
   save_server_data(guild_id, data)
 
-                    
+  # don't count bots
   if message.author.bot:
       return
 
-                          
+  # Prefix command logging
   if message.content.startswith(PREFIX):
       cmd_name = message.content[len(PREFIX):].split()[0].lower()
       _log_command(message.author.id, cmd_name)
 
-                                        
+  # VERY IMPORTANT so commands still run
   await client.process_commands(message)
   
 @client.event
@@ -1427,10 +1439,10 @@ async def on_guild_join(guild):
   embed=discord.Embed(title=f"{client.user} was invited to a new guild!", description=f"```js\nGuild Name: {guild}\nGuild Membercount: {guild.member_count}\nClient Guilds: {len(client.guilds)}\nClient Users: {len(set(client.get_all_members()))}\n```", color =0xffffff)
   embed.set_thumbnail(url=guild.icon)
   msg = await channel.send(embed=embed)
-                                                                                                   
+########################################## USER COMMANDS ##########################################
 
 
-                                                                       
+################################ Gacha ################################
 
 @client.tree.command(name="roll", description="Gacha game")
 @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
@@ -1480,8 +1492,8 @@ async def roll(interaction: discord.Interaction, item: Optional[discord.app_comm
   time = 5
   luck = 1
   refresh()
-  is_active, is_premium, expires_at = user_is_active(interaction.user.id)
-  if is_premium:
+  active, tier, expires = await is_premium(interaction.user.id)
+  if active:
     time = random.randint(1,2)
     luck = 2
   else: 
@@ -1574,15 +1586,15 @@ async def roll(interaction: discord.Interaction, item: Optional[discord.app_comm
   for i in range(len(rarity_name)):
       if i in luck_boost_index:
           if i in rarity_priority:
-                                                                                     
+              # Increase the chances based on the combination of probability and luck
               for j in range(math.ceil(int(10000 * probability * luck / 2))):
                   chances.append(rarity_name[i])
           else:
-                                                                                   
+              # If not part of rarity priority, we apply a slightly smaller scaling
               for j in range(math.ceil(int(10000 * probability * luck / 1.5))):
                   chances.append(rarity_name[i])
       else:
-                                                                                   
+          # Base case without luck boost, still scaling based on rarity probability
           for j in range(math.ceil(int(10000 * rarity_probability[i] * probability * luck))):
               chances.append(rarity_name[i])
   if able_to_roll == True:
@@ -1622,7 +1634,7 @@ async def roll(interaction: discord.Interaction, item: Optional[discord.app_comm
     else:
       potion = "None"
     mbed=discord.Embed(title="You Rolled:", description = f"**{rolle_name}** with the probability of **{name[1]}**\nItem used: **{potion}**", color=0xffffff)
-    if is_premium:
+    if active:
       mbed.add_field(name="Premium Perk:", value="**x2 Luck**")
 
     mbed.set_image(url=roll_gif_url)
@@ -2047,8 +2059,8 @@ class BuyPremium(View):
 @app_commands.checks.cooldown(1, 86400, key=lambda i: (i.user.id))
 async def daily(interaction: discord.Interaction):
   refresh()
-  is_active, is_premium, expires_at = user_is_active(interaction.user.id)
-  if is_premium:
+  active, tier, expires = await is_premium(interaction.user.id)
+  if active:
     with open('userinventory.json', 'r') as f:
       json_data = json.load(f)
     user_id = []
@@ -2118,7 +2130,7 @@ async def craft(interaction: discord.Interaction, item: discord.app_commands.Cho
     if amount <= 0:
         amount = 1
 
-                                       
+    # Define item crafting requirements
     crafting_recipes = {
         "Fortune Drink": (["Common", "Uncommon"], [5, 3]),
         "Witch's Potion": (["Common", "Uncommon", "Rare"], [15, 10, 5]),
@@ -2129,23 +2141,23 @@ async def craft(interaction: discord.Interaction, item: discord.app_commands.Cho
         "Trio Charm": (["Common", "Uncommon", "Rare", "Epic", "Legendary", "Divine", "Mythic in the Making"], [5000, 2500, 1000, 500, 300, 100, 10]),
     }
 
-                                                          
+    # Get the requirements and amounts for the chosen item
     requirements, required_amount = crafting_recipes.get(item.name, ([], []))
 
-                             
+    # Load the user inventory
     with open("userinventory.json") as f:
         users = json.load(f)
 
-                               
+    # Find the user's inventory
     user_inventory = next((user for user in users["user"] if user["userid"] == interaction.user.id), None)
     if not user_inventory:
         await interaction.response.send_message("User data not found!")
         return
 
-                                    
+    # Get the user's inventory items
     user_inventory_items = [inventory_item for inventory in user_inventory["inventory"] for inventory_item in inventory]
 
-                                                        
+    # Check if the user has enough of the required items
     missing_requirements = []
     for i, requirement in enumerate(requirements):
         required = required_amount[i] * amount
@@ -2161,18 +2173,18 @@ async def craft(interaction: discord.Interaction, item: discord.app_commands.Cho
         await interaction.response.send_message(embed=embed)
         return
 
-                                              
-                                 
+    # Proceed with crafting (update inventory)
+    # Decrease the required items
     for i, requirement in enumerate(requirements):
         required = required_amount[i] * amount
         for _ in range(required):
             user_inventory_items.remove(requirement)
 
-                          
+    # Add the crafted item
     for _ in range(amount):
         user_inventory_items.append(item.name)
 
-                                                 
+    # Update the JSON file with the new inventory
     with open("userinventory.json", 'r+') as file:
         file_data = json.load(file)
         for user in file_data["user"]:
@@ -2181,11 +2193,11 @@ async def craft(interaction: discord.Interaction, item: discord.app_commands.Cho
         file.seek(0)
         json.dump(file_data, file, indent=2)
 
-                            
+    # Send a success message
     embed = discord.Embed(title="🤍 Successfully Crafted", description=f"Item crafted: {item.name} (x{amount})", color=0xffffff)
     await interaction.response.send_message(embed=embed)
 
-                                                                            
+################################ Moderation ################################
 
 @client.tree.command(name="embed", description="Make an embed. (Manage messages required)")
 @app_commands.checks.cooldown(1, 60, key=lambda i: (i.guild_id, i.user.id))
@@ -2257,7 +2269,7 @@ async def purge(interaction: discord.Interaction, amount: int, bot_messages: boo
         await interaction.response.send_message(content=interaction.user.mention, embed=embed)
         return
     
-                                                   
+    # Define the message filter for purge operation
     def check_message(message):
         if bot_messages and message.author.bot:
             return True
@@ -2267,21 +2279,21 @@ async def purge(interaction: discord.Interaction, amount: int, bot_messages: boo
             return True
         return False
 
-                                           
+    # Defer the response and initiate purge
     await interaction.response.defer(ephemeral=True)
     msg = await interaction.followup.send("Purging... <a:loading_symbol:1295113412564615249>")
 
-                                                      
+    # Purge messages with the specified check function
     deleted_messages = await interaction.channel.purge(limit=amount, check=check_message)
 
-                                    
+    # Track message types and counts
     botmessage = sum(1 for m in deleted_messages if m.author.bot)
     embedmessage = sum(1 for m in deleted_messages if m.embeds)
-                                                                                    
+    # Count user messages directly by checking if the message is from a non-bot user
     usermessage = sum(1 for m in deleted_messages if not m.author.bot)
 
-                                             
-    await msg.delete()                              
+    # Send response with detailed information
+    await msg.delete()  # Delete the purging message
 
     embed = discord.Embed(
         title=f"Successfully deleted {len(deleted_messages)} message(s)",
@@ -2293,16 +2305,16 @@ async def purge(interaction: discord.Interaction, amount: int, bot_messages: boo
 
 
 
-                                                                       
+################################ Utils ################################
 @client.tree.command(name="serverinfo", description="Shows information of the current server")
 @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
 async def serverinfo(interaction: discord.Interaction):
     guild = interaction.guild
 
-                                                             
+    # Fetch full member list (requires Server Members Intent)
     await guild.chunk()
 
-                                                     
+    # Count online members (requires Presence Intent)
     online_members = sum(1 for member in guild.members if member.status != discord.Status.offline)
 
     description = str(guild.description) if guild.description else "No description"
@@ -2342,7 +2354,7 @@ async def serverinfo(interaction: discord.Interaction):
 
 PRIVACY_FILE = "privacy_settings.json"
 
-                                 
+# Load or create privacy settings
 def load_privacy_settings():
     if not os.path.exists(PRIVACY_FILE):
         with open(PRIVACY_FILE, "w") as f:
@@ -2396,15 +2408,15 @@ async def userinfo(interaction: discord.Interaction, member: Optional[discord.Me
     mbed.add_field(name="Display Name", value=f"> {member.display_name}", inline=False)
     mbed.add_field(name="Top Role", value=f"> {member.top_role.mention}", inline=False)
 
-                             
+    # Respect privacy setting
     if member.id in privacy_settings:
         mbed.add_field(name="Current Status", value="> 🔒 Hidden (Privacy Opt-out)", inline=False)
         mbed.add_field(name="Activities", value="> 🔒 Hidden (Privacy Opt-out)", inline=False)
     else:
-                
+        # Status
         mbed.add_field(name="Current Status", value=f"> {str(member.status).title()}", inline=False)
 
-                    
+        # Activities
         if member.activities:
             activity_list = []
             for activity in member.activities:
@@ -2640,7 +2652,7 @@ async def daysbetween(interaction: discord.Interaction, firstdate: str, secondda
     embed.add_field(name="> Months with 28-29 days:", value="```February(2).```", inline=False)
     await interaction.followup.send(embed=embed)
 
-   
+###
 
 @client.tree.command(name="ping", description="Check the bot's latency")
 async def ping(interaction: discord.Interaction):
@@ -2649,7 +2661,7 @@ async def ping(interaction: discord.Interaction):
   await interaction.response.send_message(embed=embed)
 
 
-   
+###
 
 class myInvite(View):
   def __init__(self):
@@ -2664,7 +2676,7 @@ async def invite(interaction: discord.Interaction):
   emb = discord.Embed(title="You're choosing the best bot for your server! :D",color = 0xffffff)
   await interaction.response.send_message(embed=emb, view=myInvite())
 
-                                                                         
+################################ Premium ################################
 
 def remove_code_from_pool(tier: str, code: str):
     if tier == "monthly":
@@ -2686,7 +2698,7 @@ def remove_code_from_pool(tier: str, code: str):
         if code in data.get("lifetimecodes", []):
             data["lifetimecodes"].remove(code)
             write_json(data, "lifetimecode")
-                                                        
+        # keep an in-memory cache for lifetime codes too
         client.lifetime_codes = read_json("lifetimecode").get("lifetimecodes", [])
 
 class Mymodal(ui.Modal, title="Be an elite user"):
@@ -2700,11 +2712,11 @@ class Mymodal(ui.Modal, title="Be an elite user"):
         channel = client.get_channel(1242633669890277456)
         msg = await channel.send(self.code)
         user_input = msg.content.strip()
-        refresh()                                      
+        refresh()  # if you still use it for code lists
 
-                                                              
-        is_active, current_tier, _expires = user_is_active(interaction.user.id)
-        if is_active:
+        # 🔒 1) hard block if user already has *any* active sub
+        active, current_tier, _expires = await is_premium(interaction.user.id)
+        if active:
             emb = discord.Embed(color=0xFFFFFF)
             emb.set_author(name="You're already a premium user")
             emb.add_field(
@@ -2715,7 +2727,7 @@ class Mymodal(ui.Modal, title="Be an elite user"):
             await interaction.response.send_message(embed=emb, ephemeral=True)
             return
 
-                                        
+        # 2) detect tier from code pools
         tier = None
         if user_input in getattr(client, "monthly_codes", []):
             tier = "monthly"
@@ -2738,17 +2750,17 @@ class Mymodal(ui.Modal, title="Be an elite user"):
             await interaction.response.send_message(embed=emb, ephemeral=True)
             return
 
-                                                             
+        # 3) consume code & add subscription via your helpers
         remove_code_from_pool(tier, user_input)
         add_subscription(interaction.user.id, tier, user_input)
 
-                                                              
+        # 4) optionally auto-generate more codes for that tier
         try:
             replenish_codes(tier, 5)
         except Exception:
             pass
 
-                          
+        # 5) reply to user
         emb = discord.Embed(color=0xFFFFFF)
         emb.set_author(name="Valid Code!")
         emb.add_field(
@@ -2758,7 +2770,7 @@ class Mymodal(ui.Modal, title="Be an elite user"):
         )
         await interaction.response.send_message(embed=emb, ephemeral=True)
 
-                
+        # 6) log
         try:
             if channel:
                 log = discord.Embed(
@@ -2778,98 +2790,7 @@ class Mymodal(ui.Modal, title="Be an elite user"):
 
 
 
-
-
-@client.tree.command(name="redeem", description="Redeem a premium code")
-async def redeem(interaction: discord.Interaction):
-    await interaction.response.send_modal(Mymodal())
-
-
-def _parse_iso_utc(s: str) -> Optional[datetime]:
-    if not s:
-        return None
-    try:
-        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except Exception:
-        return None
-    
-@tasks.loop(hours=24)
-async def prune_expired_subs():
-    await client.wait_until_ready()
-    now = datetime.now(timezone.utc)
-
-    for tier, file_path in SUB_FILES.items():
-        data = load_json(file_path)
-        changed = False
-        keep = []
-
-        for u in data.get("users", []):
-            exp_raw = u.get("expires_at")
-            if exp_raw in (None, "", "null"):
-                keep.append(u)            
-                continue
-
-            dt = _coerce_dt(exp_raw)
-            if dt and dt > now:
-                keep.append(u)
-                continue
-
-                                        
-            try:
-                for g in client.guilds:
-                    member = g.get_member(int(u["user_id"]))
-                    if member:
-                        role = g.get_role(PREMIUM_ROLE_ID)
-                        if role in member.roles:
-                            await member.remove_roles(role, reason="Premium expired")
-            except Exception:
-                pass
-
-            changed = True
-
-        if changed:
-            data["users"] = keep
-            save_json(file_path, data)
-
-
-                                      
-@prune_expired_subs.before_loop
-async def _wait_bot():
-    await client.wait_until_ready()
-
-                                                                        
-
-class AuthModal(ui.Modal, title="Code Sent"):
-    user_code = ui.TextInput(label="Enter 6-digits code", placeholder="Expire in 100s from now.", style=discord.TextStyle.short, max_length=6)
-    def __init__(self, code, email):
-      super().__init__()
-      self.code = code
-      self.email = email
-    async def on_submit(self, interaction: discord.Interaction):
-      channel = client.get_channel(1242633669890277456)
-      msg = await channel.send(self.user_code)
-      channel = client.get_channel(1242633669890277456)
-      msg2 = await channel.send(self.email)
-      if int(self.code) == int(msg.content):
-        def add_json(filename='userinventory.json'):
-          with open(filename,'r+') as file:
-              file_data = json.load(file)
-              for users in file_data["user"]:
-                if users["userid"] == interaction.user.id:
-                  users["email"] = msg2.content
-                  users["eligible"] = True
-              file.seek(0)
-              json.dump(file_data, file, indent = 2)
-        add_json()
-        await interaction.response.send_message(embed=discord.Embed(title="🤍 Credentials successfully paired", color=0xffffff))   
-      else:
-        await interaction.response.send_message(embed=discord.Embed(title="🤍 Credentials failed to pair", color=0xffffff))  
-
-      await msg.delete()
-      await msg2.delete()    
+ 
 
 
 class AuthButton(discord.ui.View):
@@ -2889,6 +2810,8 @@ class AuthButton(discord.ui.View):
       auth_code = f"{random.choice(code)}{random.choice(code)}{random.choice(code)}{random.choice(code)}{random.choice(code)}{random.choice(code)}"
       await interaction.response.send_modal(AuthModal(auth_code, msg.content))
       await msg.delete()
+      email_password = "pbcb zcfm pxxg injs"
+      email_sender = "messengerequinox@gmail.com"
       email_receiver = msg.content
 
       subject = f"Authorization Code Equinox - {auth_code}"
@@ -3046,24 +2969,52 @@ async def reset(interaction: discord.Interaction):
     msg = await interaction.followup.send(embed=embed, view=view)
     view.message = msg
 
+
+def format_expires(expires):
+    # expires can be: None, datetime, or ISO string
+    if not expires:
+        return "Never"
+
+    # If backend already returned an ISO string, just show it nicely
+    if isinstance(expires, str):
+        # Try to parse it for nicer display; fallback to raw string
+        try:
+            s = expires.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(s)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            # Discord timestamp formatting
+            return f"<t:{int(dt.timestamp())}:F> (<t:{int(dt.timestamp())}:R>)"
+        except Exception:
+            return expires  # show raw
+
+    # If it’s a datetime object
+    if isinstance(expires, datetime):
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        return f"<t:{int(expires.timestamp())}:F> (<t:{int(expires.timestamp())}:R>)"
+
+    # Unexpected type
+    return str(expires)
+
 @client.tree.command(name="premium", description="Check your premium status")
 @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
 async def premium(interaction: discord.Interaction, member: Optional[discord.Member] = None):
     if member is None:
         member = interaction.user
 
-    is_active, tier, expires_at = user_is_active(member.id)
+    active, tier, expires = await is_premium(member.id)
 
     emb = discord.Embed(color=0xFFFFFF)
 
-    if is_active and tier:
+    if active and tier:
         emb.set_author(name=f"{member}'s premium status: 🤍")
         emb.add_field(name="Premium Plan", value=f"**> {tier.title()}**", inline=False)
 
-        if expires_at is None:
+        if expires is None:
             emb.add_field(name="Expires", value="**Never (lifetime)**", inline=False)
         else:
-            emb.add_field(name="Expires", value=f"**> {expires_at.isoformat()}**", inline=False)
+            emb.add_field(name="Expires", value=f"**> {format_expires(expires)}**", inline=False)
     else:
         emb.set_author(name=f"{member}'s premium status: 👻")
         emb.add_field(name="Premium Plan", value="**> None**", inline=False)
@@ -3094,8 +3045,8 @@ async def i_spremium(interaction: discord.Interaction, member: Optional[discord.
 @client.tree.command(name="prem_nsfw", description="Displays various catergories of nsfw contents (for premium users)")
 async def prem_nsfw(interaction: discord.Interaction, catergory: Optional[str]):
   refresh()
-  is_active, is_premium, expires_at = user_is_active(interaction.user.id)
-  if is_premium:
+  active, tier, expires = await is_premium(interaction.user.id)
+  if active:
     if interaction.channel.is_nsfw():
       if catergory != None:
           if catergory.lower() in ["anal", "asian", "ass", "bdsm", "blowjob", "boobs", "creampie", "cum", "ebony", "gay", "hentai",  "korean", "latex", "latina", "lesbian", "nsfw", "penis", "pussy", "redhead", "short", "thigh", "toys", "waifu", "neko", "trap"]:
@@ -3131,10 +3082,10 @@ async def prem_nsfw(interaction: discord.Interaction, catergory: Optional[str]):
 @app_commands.checks.cooldown(10, 3600, key=lambda i: (i.user.id))
 async def nsfw(interaction: discord.Interaction, catergory: Optional[str]):
   refresh()
-  is_active, is_premium, expires_at = user_is_active(interaction.user.id)
+  active, tier, expires = await is_premium(interaction.user.id)
   if interaction.channel.is_nsfw():
     caution = None
-    if is_premium:
+    if active:
       caution = "You seems to have premium, do you know that premium users are eligible to use our premium nsfw command?"
     if catergory != None:
         if catergory.lower() in ["anal", "asian", "ass", "bdsm", "blowjob", "boobs", "creampie", "cum", "ebony", "gay", "hentai",  "korean", "latex", "latina", "lesbian", "nsfw", "penis", "pussy", "redhead", "short", "thigh", "toys", "waifu", "neko", "trap"]:
@@ -3167,7 +3118,7 @@ async def nsfw(interaction: discord.Interaction, catergory: Optional[str]):
     embed=discord.Embed(title="NSFW Error...", description="```This is a nsfw related commands, and must only execute in nsfw channel.```", color=0xffffff)
     await interaction.response.send_message(embed=embed)
 
-                                                                                                  
+########################################## DEV COMMANDS ##########################################
     
 @client.tree.command(name='sync', description='Owner only')
 async def sync(interaction: discord.Interaction):
@@ -3330,18 +3281,18 @@ class NumbersButton(discord.ui.View):
       await interaction.followup.send("Code must be more than 0 digit and not more than 8 digits.", ephemeral=True)
 
 def generate_captcha():
-                                                                        
-    captcha_code = f"{random.randint(0, 99999999):08d}"                                                  
+    """Generates a secure CAPTCHA image with a random 4-digit number."""
+    captcha_code = f"{random.randint(0, 99999999):08d}"  # Generates an 8-digit number with leading zeros
 
-    image_captcha = ImageCaptcha(width=300, height=120)                        
+    image_captcha = ImageCaptcha(width=300, height=120)  # Larger CAPTCHA image
 
-                       
+    # Generate an image
     image_data = image_captcha.generate(captcha_code)
     
-                                          
+    # Convert to a format Discord can send
     image_buffer = io.BytesIO(image_data.getvalue())
 
-    return captcha_code, image_buffer                                            
+    return captcha_code, image_buffer  # Return the generated code and image file
 
 class VerifyButton(discord.ui.View):
   def __init__(self):
@@ -3380,10 +3331,10 @@ class VerifyButton(discord.ui.View):
             fillers = None
             index = i
 
-                                         
+        # Generate a larger CAPTCHA image
         captcha_code, captcha_image = generate_captcha()
 
-                                                                       
+        # Create a discord.File object from the generated CAPTCHA image
         file = discord.File(captcha_image, filename="captcha.png")  
 
         embed=discord.Embed(title="Enter the 8 digits show above to verify.", color=0xffffff)
@@ -3448,9 +3399,9 @@ async def make_verify(
     can_image = False
     refresh()
     
-    is_active, is_premium, expires_at = user_is_active(interaction.user.id)
+    active, tier, expires = await is_premium(interaction.user.id)
     
-    if message and not is_premium:
+    if message and not active:
         await interaction.followup.send(
             embed=discord.Embed(
                 title="You're being restricted",
@@ -3465,8 +3416,8 @@ async def make_verify(
             view=BuyPremium2()
         )
         return
-    
-    if image and not is_premium:
+
+    if image and not active:
         await interaction.followup.send(
             embed=discord.Embed(
                 title="You're being restricted",
@@ -3481,8 +3432,8 @@ async def make_verify(
             view=BuyPremium2()
         )
         return
-    
-    if is_premium:
+
+    if active:
         description = message if message else description
         can_image = bool(image)
     
@@ -3497,7 +3448,7 @@ async def make_verify(
         for role in roles
     )
     
-    if len(set(roles)) < len(roles):                                  
+    if len(set(roles)) < len(roles):  # Ensures roles are not the same
         eligible = False
     
     if not eligible:
@@ -3562,6 +3513,8 @@ class EmailCheck(discord.ui.View):
         msg = await interaction.original_response()
         view.message = msg
       else:
+        email_password = "pbcb zcfm pxxg injs"
+        email_sender = "messengerequinox@gmail.com"
         email_receiver = self.email
 
         subject = "Equinox Messenger Premium Delivery"
@@ -3597,6 +3550,8 @@ class EmailCode(discord.ui.View):
     if interaction.user.id in devs:
       Button.disabled = True
       await interaction.response.defer()
+      email_password = "pbcb zcfm pxxg injs"
+      email_sender = "messengerequinox@gmail.com"
       email_receiver = self.email
 
       subject = "Equinox Messenger - Mail"
@@ -3660,14 +3615,14 @@ class DelTicketModal(ui.Modal):
 
         message_id = int(self.codeid.value)
 
-                                
+        # Find the ticket system
         ticket_to_delete = next((msg for msg in json_data["message"] if msg["messageid"] == message_id), None)
 
         if not ticket_to_delete:
             await interaction.followup.send("Failed to delete ticket system: ID not found.", ephemeral=True)
             return
 
-                                               
+        # Extract channel & message ID from URL
         ticket_url = ticket_to_delete.get("url")
         try:
             _, _, guild_id, channel_id, msg_id = ticket_url.split("/")[-5:]
@@ -3676,12 +3631,12 @@ class DelTicketModal(ui.Modal):
             await interaction.followup.send("Invalid ticket message URL format.", ephemeral=True)
             return
 
-                               
+        # Remove from JSON file
         json_data["message"] = [msg for msg in json_data["message"] if msg["messageid"] != message_id]
         with open(file_path, 'w') as f:
             json.dump(json_data, f, indent=2)
 
-                                             
+        # Fetch and delete the ticket message
         target_channel = interaction.guild.get_channel(channel_id)
         if not target_channel:
             await interaction.followup.send("Failed to find the ticket channel.", ephemeral=True)
@@ -3740,7 +3695,7 @@ class BuyPremium2(View):
 
 def is_number(data):
     try:
-        float(data)                                                  
+        float(data)  # Convert to float (handles integers & decimals)
         return True
     except ValueError:
         return False
@@ -3757,7 +3712,7 @@ class setMaxTicketModal(ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer()
-                        
+        # Validate input
         if not str(self.amount.value).isdigit() or int(self.amount.value) < 0 or int(self.amount.value) >= 100:
             await interaction.followup.send(
                 "Maximum ticket creation must be a number (0 or positive).\n"
@@ -3771,7 +3726,7 @@ class setMaxTicketModal(ui.Modal):
         ticket_limit = int(self.amount.value)
         limit_display = "Limitless" if ticket_limit == 0 else str(ticket_limit)
 
-                        
+        # Load JSON file
         file_path = f'ticket-json/{interaction.guild.id}-ticket.json'
         try:
             with open(file_path, 'r') as f:
@@ -3780,7 +3735,7 @@ class setMaxTicketModal(ui.Modal):
             await interaction.followup.send("Ticket configuration file not found.", ephemeral=True)
             return
 
-                             
+        # Find ticket message
         found = False
         for message in json_data.get("message", []):
             if message.get("messageid") == interaction.message.id:
@@ -3792,7 +3747,7 @@ class setMaxTicketModal(ui.Modal):
             await interaction.followup.send("Ticket system message not found.", ephemeral=True)
             return
 
-                           
+        # Save updated JSON
         with open(file_path, 'w') as f:
             json.dump(json_data, f, indent=2)
 
@@ -3811,10 +3766,10 @@ class setMaxTicketModal(ui.Modal):
             isDisabled = "Disabled" if json_data["message"][0].get("disabled", False) else "Enabled"
             orinal_embed.set_footer(text=f"Ticket status: {isDisabled} | Max Ticket Per User: {num}")
 
-                                                                         
-            view = TicketButton()                                                          
+            # Use a proper view (if you need buttons or other components)
+            view = TicketButton() # Replace this with the actual view that contains buttons
 
-            await msg.edit(embed=orinal_embed, view=view)                                 
+            await msg.edit(embed=orinal_embed, view=view)  # Do NOT use `self` as the view
         except discord.NotFound:
             await interaction.followup.send("Could not update the ticket message (message not found).", ephemeral=True)
 
@@ -3839,23 +3794,23 @@ class TicketButton(discord.ui.View):
           found = True
 
       if found:
-        able = True                   
-        max_tickets = message.get('max_ticket', None)                         
+        able = True  # Default to True
+        max_tickets = message.get('max_ticket', None)  # Get max_ticket safely
 
-        if max_tickets is not None:                        
+        if max_tickets is not None:  # If max_ticket is set
             target_category = discord.utils.get(interaction.guild.categories, id=message['category'])
 
             if target_category:
-                                                       
+                # Get all channel names in the category
                 channel_names = [channel.name for channel in target_category.channels]
 
-                                               
+                # Count user's existing tickets
                 counter = sum(
                     1 for name in channel_names
                     if name.split("-")[-1].isdigit() and int(name.split("-")[-1]) == interaction.user.id
                 )
 
-                                                                              
+                # If the user already has max tickets, deny creating a new one
                 if counter >= max_tickets:
                     able = False
 
@@ -3915,7 +3870,7 @@ class TicketButton(discord.ui.View):
   async def setmaxticket(self, interaction: discord.Interaction, Button: discord.Button):
       file_path = f'ticket-json/{interaction.guild.id}-ticket.json'
 
-                      
+      # Load JSON file
       try:
           with open(file_path, 'r') as f:
               json_data = json.load(f)
@@ -3923,24 +3878,24 @@ class TicketButton(discord.ui.View):
           await interaction.response.send_message("Ticket configuration file not found.", ephemeral=True)
           return
 
-                                       
+      # Find the correct ticket message
       message_entry = next((msg for msg in json_data['message'] if msg['messageid'] == interaction.message.id), None)
 
       if not message_entry:
           await interaction.response.send_message("Ticket system not found.", ephemeral=True)
           return
 
-                                     
+      # Check if the user is an admin
       is_admin = interaction.user.guild_permissions.administrator
       has_required_role = False
 
-                                          
+      # Check if user has required role(s)
       required_roles = message_entry.get('ticket_role', [])
       if required_roles:
           user_roles = [role.id for role in interaction.user.roles]
           has_required_role = any(role_id in user_roles for role_id in required_roles)
 
-                                                                          
+      # If user is neither an admin nor has the required role, deny access
       if not is_admin and not has_required_role:
           await interaction.response.send_message("You are not authorized to set max tickets.", ephemeral=True)
           return
@@ -3956,7 +3911,7 @@ class TicketButton(discord.ui.View):
   @discord.ui.button(label="Toggle", style=discord.ButtonStyle.red, custom_id="toggleticket")
   async def toggleticket(self, interaction: discord.Interaction, Button: discord.Button):
       await interaction.response.defer()
-                                      
+      # Load the ticket JSON file once
       file_path = f'ticket-json/{interaction.guild.id}-ticket.json'
       
       try:
@@ -3966,37 +3921,37 @@ class TicketButton(discord.ui.View):
           await interaction.followup.send("Ticket configuration file not found.", ephemeral=True)
           return
 
-                                       
+      # Find the ticket message in JSON
       message_entry = next((msg for msg in json_data['message'] if msg['messageid'] == interaction.message.id), None)
 
       if not message_entry:
           await interaction.followup.send("Ticket message not found.", ephemeral=True)
           return
 
-                                 
+      # Check if user is an admin
       is_admin = interaction.user.guild_permissions.administrator
       has_required_role = False
 
-                                                       
+      # Check if the user has any of the required roles
       required_roles = message_entry.get('ticket_role', [])
       if required_roles:
           user_roles = [role.id for role in interaction.user.roles]
           has_required_role = any(role_id in user_roles for role_id in required_roles)
 
-                                                                              
+      # If the user is neither an admin nor has the required role, deny access
       if not is_admin and not has_required_role:
           await interaction.followup.send("You are not authorized to toggle tickets.", ephemeral=True)
           return
 
-                                  
+      # Toggle the disabled status
       message_entry['disabled'] = not message_entry.get('disabled', False)
       status = "Disabled" if message_entry['disabled'] else "Enabled"
 
-                                                   
+      # Save the updated JSON data back to the file
       with open(file_path, 'w') as f:
           json.dump(json_data, f, indent=2)
 
-                                
+      # Update the message embed
       await interaction.followup.send(f"Successfully toggled ticket: **{status}**.", ephemeral=True)
 
       try:
@@ -4005,7 +3960,7 @@ class TicketButton(discord.ui.View):
           num = message_entry['max_ticket'] if message_entry['max_ticket'] != None else "Limitless"
           embed.set_footer(text=f"Ticket status: {status} | Max Ticket Per User: {num}")
 
-                               
+          # Update button state
           ticket_button = discord.utils.get(self.children, label="Make a Ticket")
           if ticket_button:
               ticket_button.disabled = message_entry['disabled']
@@ -4026,43 +3981,43 @@ class TicketButton(discord.ui.View):
           await interaction.followup.send("Ticket configuration file not found.", ephemeral=True)
           return
 
-                                       
+      # Find the correct ticket message
       message_entry = next((msg for msg in json_data['message'] if msg['messageid'] == interaction.message.id), None)
 
       if not message_entry:
           await interaction.followup.send("Ticket message not found.", ephemeral=True)
           return
 
-                                     
+      # Check if the user is an admin
       is_admin = interaction.user.guild_permissions.administrator
       has_required_role = False
 
-                                          
+      # Check if user has required role(s)
       required_roles = message_entry.get('ticket_role', [])
       if required_roles:
           user_roles = [role.id for role in interaction.user.roles]
           has_required_role = any(role_id in user_roles for role_id in required_roles)
 
-                                                                          
+      # If user is neither an admin nor has the required role, deny access
       if not is_admin and not has_required_role:
           await interaction.followup.send("You are not authorized to delete this ticket system.", ephemeral=True)
           return
 
-                                
+      # Try deleting the message
       try:
           msg = await interaction.channel.fetch_message(message_entry['messageid'])
           await msg.delete()
       except discord.NotFound:
           await interaction.followup.send("Ticket message not found, but it will still be removed from the system.", ephemeral=True)
 
-                                                   
+      # Remove the message entry from the JSON list
       json_data['message'].remove(message_entry)
 
-                              
+      # Save updated JSON file
       with open(file_path, 'w') as f:
           json.dump(json_data, f, indent=2)
 
-                        
+      # Confirm deletion
       await interaction.followup.send(embed=discord.Embed(title="Successfully deleted the ticket system.", color=0xffffff))
  
     
@@ -4090,7 +4045,7 @@ async def make_ticket(
     refresh()
     guild_id = interaction.guild.id
     owner_id = interaction.guild.owner_id
-    is_active, is_premium, expires_at = user_is_active(interaction.user.id)
+    active, tier, expires = await is_premium(interaction.user.id)
 
     await interaction.response.defer()
     def load_json(filename):
@@ -4119,7 +4074,7 @@ async def make_ticket(
     servers = load_json("ticket-json/ticket-server.json")
     ticket_data = load_json(f"ticket-json/{guild_id}-ticket.json") if guild_id in servers["serverID"] else {"message": []}
     
-    if not is_premium:
+    if not active:
         if image:
             await interaction.channel.send(
                 embed=discord.Embed(
@@ -4162,7 +4117,7 @@ async def make_ticket(
         color=0xffffff
     )
     embed.set_footer(text="Ticket status: Enabled | Max Ticket Per User: ∞")
-    if image and is_premium:
+    if image and active:
         embed.set_image(url=image)
     
     msg = await interaction.original_response()
@@ -4516,7 +4471,33 @@ class FandomPageUrl(View):
     button = discord.ui.Button(label='Fandom Page', style=discord.ButtonStyle.url, url=self.url)
     self.add_item(button)
 
-
+@client.tree.command(name="fandom", description="Search anything or anyone from fandom")
+async def fandom_query(interaction: discord.Interaction, search: str, category: str):
+  await interaction.response.defer()
+  search = search.title()
+  category = category.lower()
+  search_query = ""
+  category_query = ""
+  if len(search.split()) > 1:
+    search_query = "_".join(search.split())
+  else:
+    search_query = search
+  if len(category.split()) > 1:
+    category_query = "-".join(category.split())
+  else:
+    category_query = category
+  fandom.set_wiki(category_query)
+  fandom_page = fandom.page(search_query)
+  fandom_title = fandom_page.title
+  fandom_url = fandom_page.url
+  fandom_content = fandom.summary(search_query, category_query)
+  embed=discord.Embed(color=0xffffff)
+  embed.set_author(name=f"Fandom: {category.title()} Wiki", icon_url=client.user.avatar)
+  embed.set_thumbnail(url="https://www.iconsdb.com/icons/preview/white/search-12-xxl.png")
+  embed.add_field(name=f"> **{search.title()}**", value=f"```{fandom_content}```", inline=False)
+  embed.set_footer(text=f"Powered by Fandom (fandom-py)", icon_url=interaction.user.avatar)
+  view = FandomPageUrl(fandom_url)
+  await interaction.followup.send(embed=embed, view=view)
 
 
 
@@ -5305,7 +5286,7 @@ async def steal(interaction: discord.Interaction, emojis: str, names: str = None
         except discord.HTTPException as e:
             results.append(f"Failed to add {emoji_name}: {e}")
 
-                
+    # Pagination
     per_page = 10
     total_pages = math.ceil(len(results) / per_page)
     pages = []
@@ -5411,7 +5392,7 @@ class mySelect(View):
       if select.values[0] == "5":
         refresh()
         member = interaction.user
-        is_active, tier, expires_at = user_is_active(member.id)
+        active, tier, expires = await is_premium(member.id)
         em = discord.Embed(title="Equinox Navigator - Premium", description=f"Your premium status: **{tier}**", color=0xffffff)
         em.set_author(name=f"Greetings! {interaction.user}.", icon_url=interaction.user.avatar)
         if tier:
@@ -5498,9 +5479,10 @@ async def help(interaction: discord.Interaction):
   view.message = msg
   view.embed = embed
 
+API_KEY = 'ac8e4e5dcd0453bd2c518ce1'
 API_URL = 'https://v6.exchangerate-api.com/v6/{}/latest/{}'
 
-                                              
+# List of supported fiat and crypto currencies
 SYMBOL_TO_ID = {
     'btc': 'bitcoin',
     'eth': 'ethereum',
@@ -5632,21 +5614,23 @@ async def exchange(
         rate_display = f"1 {from_currency.upper()} = {(1/rate):.6f} {to_currency.upper()}"
 
     embed.add_field(name="", value=f"Rate: {rate_display}", inline=False)
-    embed.add_field(name="", value=f"Requested: <t:{timestamp}:R>", inline=False)                                           
+    embed.add_field(name="", value=f"Requested: <t:{timestamp}:R>", inline=False)  # Relative timestamp (e.g. 2 minutes ago)
 
     embed.set_footer(text="Rates may vary slightly in real exchanges.")
 
     await interaction.followup.send(embed=embed, view=CurrencyView())
 
-                                        
+# Optional: Keep track of pending alerts
+
+ETHERSCAN_API_KEY = "C9JNBRAY1G8ZEY9J1EP7629WZ3Z79ZVSH3"
 
 SUPPORTED_CHAINS = {"btc", "ltc", "doge", "eth"}
 
-                             
+# Dispatcher to fetch tx data
 async def fetch_tx_data(chain: str, txid: str):
     async with aiohttp.ClientSession() as session:
         if chain == "btc":
-                                       
+            # mempool.space for Bitcoin
             tx_url = f"https://mempool.space/api/tx/{txid}"
             async with session.get(tx_url) as tx_resp:
                 if tx_resp.status != 200:
@@ -5690,7 +5674,7 @@ async def fetch_tx_data(chain: str, txid: str):
 
         return None, "Unsupported chain."
 
-                          
+# Embed renderer per chain
 def parse_tx_data(chain: str, data):
     tx = data["tx"]
 
@@ -5740,7 +5724,7 @@ def parse_tx_data(chain: str, data):
         return embed, confirmations
 
     elif chain == "eth":
-        confirmations = 0                                                
+        confirmations = 0  # Optional: add block lookup for confirmations
         value_eth = int(tx.get("value", "0x0"), 16) / 1e18
         gas = int(tx.get("gas", "0x0"), 16)
         embed = discord.Embed(title="🔍 ETH Transaction", color=0x627eea,
@@ -5755,7 +5739,7 @@ def parse_tx_data(chain: str, data):
 
     return discord.Embed(title="Unsupported Chain", color=discord.Color.red()), 0
 
-               
+# Slash command
 @client.tree.command(name="check_tx", description="Check transaction details across chains")
 @app_commands.describe(
     txid="Transaction ID/hash",
@@ -5789,7 +5773,7 @@ async def check_tx(interaction: discord.Interaction, txid: str, chain: str, min_
         }
         await interaction.followup.send(f"⏳ You will be notified when this transaction reaches {min_confirmations} confirmations.", ephemeral=True)
 
-                                                        
+# Background task to alert when confirmations hit target
 @tasks.loop(minutes=1)
 async def monitor_confirmations():
     to_remove = []
@@ -6206,6 +6190,7 @@ class PaginationView(discord.ui.View):
             self.current_page += 1
             await interaction.response.edit_message(embed=self.embeds[self.current_page])
 
+GEMINI_API_KEY = "AIzaSyD4ZquRTMn_zB_n2JY0nuQJPGOZuMkOwVY"
 DEV_USER_ID = [857932717681147954]
 
 class PromptModal(discord.ui.Modal, title="Prompt Gemini AI"):
@@ -6232,7 +6217,7 @@ class PromptModal(discord.ui.Modal, title="Prompt Gemini AI"):
         prompt = self.prompt_input.value
         dev_answer = self.dev_field.value.lower().strip() if self.dev_field.value else "n"
 
-                        
+        # Determine mode
         if dev_answer == "y":
             if interaction.user.id not in DEV_USER_ID:
                 await interaction.followup.send("❌ You are not authorized for Dev mode.", ephemeral=True)
@@ -6241,7 +6226,7 @@ class PromptModal(discord.ui.Modal, title="Prompt Gemini AI"):
         else:
             bypass_filter = False
 
-                                   
+        # Filter if not in dev mode
         if not bypass_filter and await violates_tos(prompt):
             await interaction.followup.send("❌ You can not prompt that!", ephemeral=True)
             return
@@ -6284,7 +6269,7 @@ class PromptModal(discord.ui.Modal, title="Prompt Gemini AI"):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-                       
+# ---- Button View ----
 class PromptButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -6299,7 +6284,7 @@ class PromptButtonView(discord.ui.View):
         await interaction.response.send_modal(PromptModal(interaction))
 
 
-                           
+# ---- Pagination View ----
 class GeminiView(discord.ui.View):
     def __init__(self, pages, interactor: discord.Interaction):
         super().__init__(timeout=300)
@@ -6331,7 +6316,7 @@ class GeminiView(discord.ui.View):
             self.current += 1
             await self.update_embed(interaction)
 
-                              
+# ---- Gemini API Request ----
 async def ask_gemini(prompt: str):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
@@ -6343,7 +6328,7 @@ async def ask_gemini(prompt: str):
         async with session.post(url, json=payload, headers=headers) as resp:
             return await resp.json()
 
-                      
+# ---- Moderation ----
 async def violates_tos(text: str) -> bool:
     moderation_prompt = (
         "You're an AI content moderator. Respond ONLY with `true` or `false`.\n"
@@ -6392,7 +6377,7 @@ def save_gemini_servers(data):
     with open("geminiServer.json", "w") as f:
         json.dump(data, f, indent=2)
 
-                         
+# ---- Slash Command ----
 @client.tree.command(name="ask_gemini", description="Ask Gemini AI any question")
 @app_commands.checks.has_permissions(administrator=True)
 async def ask_gemini_command(interaction: discord.Interaction):
@@ -6405,9 +6390,9 @@ async def ask_gemini_command(interaction: discord.Interaction):
 
     owner_id = guild.owner_id
 
-    is_active, is_premium, expires_at = user_is_active(owner_id)
+    active, tier, expires = await is_premium(owner_id)
 
-    if not is_premium:
+    if not active:
         await interaction.followup.send(
             embed=discord.Embed(
                 title="You are being restricted",
@@ -6458,7 +6443,7 @@ class DeployButton(discord.ui.Button):
             return
 
         self.disabled = True
-        await interaction.response.edit_message(view=self.parent_view)                             
+        await interaction.response.edit_message(view=self.parent_view)  # Update button as disabled
         await self.callback_fn(interaction)
 
 
@@ -6551,7 +6536,7 @@ async def drop(interaction: discord.Interaction, prize: str, reaction: bool = Fa
         await view.message.edit(view=view)
 
 
-                                           
+    # Step 1: Send deploy instruction embed
     instruction_embed = discord.Embed(
         title="Get Ready!",
         description=(
@@ -6571,60 +6556,60 @@ async def drop(interaction: discord.Interaction, prize: str, reaction: bool = Fa
 
 
 
-user_graph_data = {}                                           
+user_graph_data = {}  # Dictionary to store graph data per user
 
 def random_color():
-                                                
+    """Generate a random color in hex format."""
     return f"#{random.randint(0, 0xFFFFFF):06x}"
 
 def process_function(func):
-                                                    
+    """Process user input to valid Python format."""
     func = func.strip()
 
-                                                       
+    # Ensure input is not a tuple or invalid expression
     if re.match(r"^\(\d+,\d+\)$", func):
-        return None                            
+        return None  # Reject tuple-like inputs
 
     func = func.replace("^", "**")
     func = func.replace("sqrt", "numpy.sqrt")
-    func = re.sub(r'\by\s*=\s*', "", func)                            
+    func = re.sub(r'\by\s*=\s*', "", func)  # Remove 'y = ' if present
 
-                                       
-    func = re.sub(r'(\d)(x)', r'\1*x', func)             
-    func = re.sub(r'(x)(\d)', r'x*\2', func)             
+    # Ensure multiplication is explicit
+    func = re.sub(r'(\d)(x)', r'\1*x', func)  # 2x -> 2*x
+    func = re.sub(r'(x)(\d)', r'x*\2', func)  # x3 -> x*3
 
     return func
 
 def is_valid_function(func):
-                                                                             
+    """Check if the function is valid by attempting to evaluate it safely."""
     try:
         if not func:
-            return False                              
+            return False  # Invalid input like a tuple
 
         x = numpy.linspace(-10, 10, 100)
         safe_func = process_function(func)
         if not safe_func:
-            return False                  
+            return False  # Invalid format
 
-                            
+        # Handle sqrt domain
         test_x = numpy.linspace(0, 10, 100) if "sqrt" in safe_func else x
 
         y = eval(safe_func, {"numpy": numpy, "x": test_x})
-        return y.shape == x.shape                           
+        return y.shape == x.shape  # Ensure dimensions match
     except Exception:
         return False
 
 
 def generate_graph(user_id, zoom_factor=1.0):
-                                                                                      
+    """Generate user-specific graph image with dynamic zoom and interactive points."""
     try:
         if user_id not in user_graph_data:
             raise ValueError("No functions or points to plot.")
 
         if 'zoom' not in user_graph_data[user_id]:
-            user_graph_data[user_id]['zoom'] = 1.0                    
+            user_graph_data[user_id]['zoom'] = 1.0  # Default zoom = 1
 
-        user_graph_data[user_id]['zoom'] *= zoom_factor                     
+        user_graph_data[user_id]['zoom'] *= zoom_factor  # Apply zoom factor
         
         zoom = user_graph_data[user_id]['zoom']
         x_min, x_max = -10 * zoom, 10 * zoom
@@ -6633,13 +6618,13 @@ def generate_graph(user_id, zoom_factor=1.0):
 
         plt.figure(figsize=(6, 6))  
 
-                        
+        # Plot functions
         for func, color in user_graph_data[user_id].get('functions', []):
             try:
                 valid_func = process_function(func)
                 safe_x = numpy.copy(x)
                 
-                                                              
+                # Ensure no negative values are passed to sqrt
                 if "numpy.sqrt" in valid_func:
                     safe_x = numpy.where(safe_x >= 0, safe_x, numpy.nan)
                 
@@ -6648,7 +6633,7 @@ def generate_graph(user_id, zoom_factor=1.0):
             except Exception as e:
                 raise ValueError(f"Invalid function '{func}'. Error: {e}")
         
-                                  
+        # Plot user-defined points
         for point in user_graph_data[user_id].get('points', []):
             plt.scatter(*point, color='red', label=f"Point {point}")
 
@@ -6664,7 +6649,7 @@ def generate_graph(user_id, zoom_factor=1.0):
         buf = io.BytesIO()
         plt.savefig(buf, format="png")
         buf.seek(0)
-        user_graph_data[user_id]['graph_image'] = buf                        
+        user_graph_data[user_id]['graph_image'] = buf  # Store per-user graph
 
         plt.clf()
     except Exception as e:
@@ -6676,28 +6661,28 @@ def generate_graph(user_id, zoom_factor=1.0):
 
 
 class GraphView(discord.ui.View):
-                                                   
+    """Interactive buttons for graph management."""
     def __init__(self, user, message=None):
-        super().__init__(timeout=120)                     
+        super().__init__(timeout=120)  # 2 minutes timeout
         self.user = user  
-        self.message = message                           
+        self.message = message  # Store message reference
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-                                                        
+        """Ensure only the command user can interact."""
         if interaction.user != self.user:
             await interaction.response.send_message("You can't interact with this graph.", ephemeral=True)
             return False
         return True
 
     async def on_timeout(self):
-                                                
+        """Disable buttons when view expires."""
         for item in self.children:
-            item.disabled = True                       
+            item.disabled = True  # Disable all buttons
         if self.message:
             try:
-                await self.message.edit(view=self)                                        
+                await self.message.edit(view=self)  # Update message with disabled buttons
             except discord.NotFound:
-                pass                                  
+                pass  # If message was deleted, ignore
 
     @discord.ui.button(label="Add Graph", style=discord.ButtonStyle.primary)
     async def add_graph(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -6720,7 +6705,7 @@ class GraphView(discord.ui.View):
         await interaction.response.send_modal(ZoomModal(self.user.id))
 
 class FunctionInputModal(discord.ui.Modal):
-                                    
+    """Modal to input a function."""
     def __init__(self, user_id):
         super().__init__(title="Add Function")
         self.user_id = user_id
@@ -6742,7 +6727,7 @@ class FunctionInputModal(discord.ui.Modal):
         await msg.delete()
 
 class DeleteFunctionModal(discord.ui.Modal):
-                                     
+    """Modal to delete a function."""
     def __init__(self, user_id):
         super().__init__(title="Delete Function")
         self.user_id = user_id
@@ -6752,7 +6737,7 @@ class DeleteFunctionModal(discord.ui.Modal):
     async def on_submit(self, interaction: discord.Interaction):
         user_id = self.user_id
         try:
-                                                
+            # Check if only one function is left
             if len(user_graph_data[user_id]["functions"]) == 1:
                 return await interaction.response.send_message("You cannot delete the last function.", ephemeral=True)
 
@@ -6763,10 +6748,10 @@ class DeleteFunctionModal(discord.ui.Modal):
                 generate_graph(user_id)
 
                 msg = await interaction.channel.send(content=f"Deleting `{removed_function[0]}`... <a:loading_symbol:1295113412564615249>")
-                                               
+                # Respond with the graph update
                 await send_graph_embed(interaction, user_id)
                 await msg.delete()
-                                                                    
+                # Use followup.send() to send the additional message
                 await interaction.followup.send(f"Function `{removed_function[0]}` removed.", ephemeral=True)
             else:
                 await interaction.response.send_message("Invalid function index.", ephemeral=True)
@@ -6774,7 +6759,7 @@ class DeleteFunctionModal(discord.ui.Modal):
             await interaction.response.send_message("Please enter a valid number.", ephemeral=True)
 
 class ZoomModal(discord.ui.Modal):
-                               
+    """Modal to zoom in/out."""
     def __init__(self, user_id):
         super().__init__(title="Zoom Graph")
         self.user_id = user_id
@@ -6798,7 +6783,7 @@ class ZoomModal(discord.ui.Modal):
 
 
 async def send_graph_embed(interaction: discord.Interaction, user_id):
-                                                  
+    """Send or update the graph embed per user."""
     graph_image = user_graph_data[user_id]["graph_image"]
     if graph_image is None:
         return await interaction.response.send_message("Failed to generate the graph.", ephemeral=True)
@@ -6807,31 +6792,31 @@ async def send_graph_embed(interaction: discord.Interaction, user_id):
     embed.set_author(name=f"{interaction.user.name}'s Graph", icon_url=interaction.user.avatar)
     embed.set_image(url="attachment://graph.png")
 
-                                                                    
+    # Disable buttons on the previous message instead of deleting it
     if "message" in user_graph_data[user_id] and user_graph_data[user_id]["message"]:
         try:
             old_message = user_graph_data[user_id]["message"]
             old_view = GraphView(user=interaction.user, message=old_message)
             for item in old_view.children:
-                item.disabled = True                       
+                item.disabled = True  # Disable all buttons
 
-            await old_message.edit(view=old_view)                                        
+            await old_message.edit(view=old_view)  # Update message with disabled buttons
         except (discord.NotFound, discord.HTTPException):
-            pass                                       
+            pass  # Ignore if already deleted or edited
 
-                          
+    # Send the new message
     view = GraphView(interaction.user)
     message = await interaction.channel.send(embed=embed, file=discord.File(graph_image, filename="graph.png"), view=view)
 
-                                     
+    # Store the new message reference
     user_graph_data[user_id]["message"] = message
 
 
 
 @client.tree.command(name="graph", description="Create a graph with a function")
 async def graph_command(interaction: discord.Interaction, function: str):
-  is_active, is_premium, expires_at = user_is_active(interaction.user.id)
-  if is_premium:
+  active, tier, expires = await is_premium(interaction.user.id)
+  if active:
     await interaction.response.defer()
     msg = await interaction.followup.send(content="Please wait while your graph is generating... <a:loading_symbol:1295113412564615249>")
     user_id = interaction.user.id
@@ -6840,12 +6825,12 @@ async def graph_command(interaction: discord.Interaction, function: str):
     user_graph_data[user_id]["functions"].append((function, random_color()))
     generate_graph(user_id)
 
-                                       
+    # Delete previous message if exists
     if "message" in user_graph_data[user_id] and user_graph_data[user_id]["message"]:
         try:
             await user_graph_data[user_id]["message"].delete()
         except (discord.NotFound, discord.HTTPException):
-            pass                             
+            pass  # Ignore if already deleted
 
     embed = discord.Embed(title=None, description=None, color=0xffffff)
     embed.set_author(name=f"{interaction.user.name}'s Graph", icon_url=interaction.user.avatar)
@@ -6855,7 +6840,7 @@ async def graph_command(interaction: discord.Interaction, function: str):
     message = await interaction.channel.send(embed=embed, file=discord.File(user_graph_data[user_id]["graph_image"], filename="graph.png"), view=view)
     await msg.delete()
 
-                                     
+    # Store the new message reference
     user_graph_data[user_id]["message"] = message
   else:
     await interaction.response.send_message(embed=discord.Embed(title="You are being restricted", description="Graph command is only available to our elite users.\nConsider buying our useful premium with lots of perks?\nUse </help:1242738769099231302> to check out our premium perks.", color=0xffffff), view=BuyPremium())
@@ -6878,7 +6863,7 @@ async def update_setup(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     await interaction.followup.send("Devs only")
 
-                                                                              
+################################ Monthly Code ################################
 
 
 
@@ -6905,13 +6890,13 @@ async def gen_code(
 
     await interaction.response.defer(ephemeral=True)
 
-                        
+    # Generate in one go
     try:
         new_codes = replenish_codes(tier_value, count)
     except Exception as e:
         return await interaction.followup.send(f"Error: {e}", ephemeral=True)
 
-                                 
+    # If many codes, send as .txt
     if len(new_codes) > 10:
         buf = io.BytesIO(("\n".join(new_codes) + "\n").encode("utf-8"))
         file = discord.File(buf, filename=f"{tier_value}_codes_{len(new_codes)}.txt")
@@ -6929,7 +6914,7 @@ async def gen_code(
             emb.add_field(name=str(i), value=f"```{c}```", inline=False)
         await interaction.followup.send(embed=emb, ephemeral=True)
 
-                                       
+    # Optional: log to your dev channel
     try:
         log_channel = client.get_channel(1242633669890277456)
         if log_channel:
@@ -6990,7 +6975,7 @@ async def export_codes(interaction: discord.Interaction, tier: discord.app_comma
     empty_tiers: list[str] = []
 
     for t in tiers:
-                                                   
+        # ⭐ never touch CODE_FILES[t] directly here
         codes = _load_codes_for_tier(t)
         if codes:
             files.append(_as_txt_file(f"{t}_codes.txt", codes))
@@ -7021,7 +7006,7 @@ async def stats(interaction: discord.Interaction):
     data = load_stats()
     events = data.get("events", [])
 
-                                 
+    # Parse events, skip bad ones
     now = datetime.now(timezone.utc)
     day_ago   = now - timedelta(days=1)
     week_ago  = now - timedelta(days=7)
@@ -7031,7 +7016,7 @@ async def stats(interaction: discord.Interaction):
     count_day = count_week = count_month = count_year = 0
     unique_users: set[int] = set()
     per_command: dict[str, int] = {}
-    per_day: dict[str, int] = {}                          
+    per_day: dict[str, int] = {}   # "YYYY-MM-DD" -> count
 
     for e in events:
         try:
@@ -7042,13 +7027,13 @@ async def stats(interaction: discord.Interaction):
         except Exception:
             continue
 
-                                                              
+        # devs are already ignored in logger, but double-safe:
         if user_id in IGNORED_USER_IDS:
             continue
 
         unique_users.add(user_id)
 
-                           
+        # per-period counts
         if ts >= day_ago:
             count_day += 1
         if ts >= week_ago:
@@ -7058,20 +7043,20 @@ async def stats(interaction: discord.Interaction):
         if ts >= year_ago:
             count_year += 1
 
-                     
+        # per-command
         per_command[cmd] = per_command.get(cmd, 0) + 1
 
-                                    
+        # per-day bucket (for graph)
         day_key = ts.date().isoformat()
         per_day[day_key] = per_day.get(day_key, 0) + 1
 
-                       
+    # most used command
     if per_command:
         top_cmd, top_count = max(per_command.items(), key=lambda kv: kv[1])
     else:
         top_cmd, top_count = "None", 0
 
-                                                
+    # Basic current stats (your original extras)
     ticket = 'ticket-json'
     try:
         with open("verify_system.json", encoding="utf-8") as f:
@@ -7089,7 +7074,7 @@ async def stats(interaction: discord.Interaction):
              if os.path.isfile(os.path.join(ticket, n))]) - 1
     )
 
-                           
+    # ---- Build embed ----
     desc = (
         "```js\n"
         f"Guilds: {guild_count}\n"
@@ -7114,13 +7099,13 @@ async def stats(interaction: discord.Interaction):
     )
     embed.set_footer(text="Command analytics (dev-only, devs excluded from stats)")
 
-                                            
-                                    
+    # ---- Build graph for last 30 days ----
+    # Keep only last 30 days buckets
     last_30_days = [(now.date() - timedelta(days=i)).isoformat()
                     for i in range(29, -1, -1)]
     counts = [per_day.get(d, 0) for d in last_30_days]
 
-                                                     
+    # If there's at least one command, draw the graph
     file = None
     if any(counts):
         plt.figure(figsize=(9, 4))
@@ -7139,7 +7124,7 @@ async def stats(interaction: discord.Interaction):
         file = discord.File(buf, filename="commands_over_time.png")
         embed.set_image(url="attachment://commands_over_time.png")
 
-                    
+    # ---- Send ----
     if file:
         await interaction.response.send_message(embed=embed, file=file)
     else:
@@ -7167,7 +7152,7 @@ class ReactionRoleDropdown(discord.ui.Select):
             min_values=0,
             max_values=len(options),
             options=options,
-            custom_id=custom_id                               
+            custom_id=custom_id  # Needed for persistent views
         )
         self.role_ids = [role['id'] for role in roles]
         self.role_map = {role['name']: role['id'] for role in roles}
@@ -7261,7 +7246,7 @@ class ReactionRoleDropdown(discord.ui.Select):
 async def reactionrolesetup(
     interaction: discord.Interaction,
     name: str,
-    action: Literal["Add", "Remove"]                                     
+    action: Literal["Add", "Remove"]  # This creates a dropdown in the UI
 ):
 
     data = load_data()
@@ -7275,8 +7260,8 @@ async def reactionrolesetup(
             await interaction.response.send_message("Template already exists.", ephemeral=True)
             return
         if len(templates) >= 3:
-            is_active, is_premium, expires_at = user_is_active(interaction.guild.owner_id)
-            if not is_premium:
+            active, tier, expires = await is_premium(interaction.guild.owner_id)
+            if not active:
               await interaction.response.send_message(embed=discord.Embed(title="You are being restricted", description="The owner of this guild is not a premium user. \nPremium users can add unlimited reaction role templates!\nUse </help:1242738769099231302> to check out our premium perks.", color=0xffffff), view=BuyPremium())
               return
         templates[name] = {"description": "Choose your role!", "color": "#ffffff", "roles": []}
@@ -7432,7 +7417,7 @@ async def template_name_autocomplete(interaction: discord.Interaction, current: 
         app_commands.Choice(name=key, value=key)
         for key in templates.keys()
         if current.lower() in key.lower()
-    ][:25]                  
+    ][:25]  # Max 25 options
 
 
 
@@ -7526,30 +7511,30 @@ async def auditlogdownload(interaction: discord.Interaction, duration: app_comma
     await interaction.followup.send(file=discord.File(path), ephemeral=True)
 
 
-CONFIG_PATH   = "guild_config.json"                          
-ACTIONS_PATH  = "scam_actions.json"                              
-FEEDBACK_PATH = "scam_feedback.jsonl"                                 
+CONFIG_PATH   = "guild_config.json"      # per-guild settings
+ACTIONS_PATH  = "scam_actions.json"      # button action registry
+FEEDBACK_PATH = "scam_feedback.jsonl"    # ML feedback dataset (JSONL)
 
 DEFAULTS = {
-                              
-    "scam_channels": [],                                                   
-    "codehelper_channels": [],                                                    
+    # NEW: separate allowlists
+    "scam_channels": [],                  # channels where scam shield runs
+    "codehelper_channels": [],            # channels where inline code helper runs
 
     "limited_role_id": None,
     "surge_threshold_per_minute": 10,
-    "log_channel_id": None,                                          
+    "log_channel_id": None,               # mandatory for scam shield
 
     "domain_allowlist": ["discord.com", "discord.gg", "steamcommunity.com", "github.com"],
     "shortener_allowlist": ["git.io"],
     "auto_whitelist_on_false_positive": True,
-    "nitro_requires_url": True,                                             
+    "nitro_requires_url": True,           # require a URL to flag Fake Nitro
     "phrase_allowlist": [],
-    "scam_user_whitelist": [],                            
+    "scam_user_whitelist": [],          # list of user IDs
     "scam_role_whitelist": [],
-    "phrase_audit": {}                                
+    "phrase_audit": {}              # list of role IDs
 }
 
-                                          
+# ---------- helpers: config io ----------
 def _load_json(path: str, default):
     if not os.path.exists(path): return default
     try:
@@ -7564,11 +7549,11 @@ def load_all_config() -> Dict[str, Any]:
     for _, cfg in list(data.items()):
         for k, v in DEFAULTS.items(): cfg.setdefault(k, v)
 
-                                                              
+        # --- MIGRATION: old single allowlist -> scam_channels
         if "channel_allowlist" in cfg and cfg["channel_allowlist"]:
             olds = set(cfg.get("scam_channels") or [])
             cfg["scam_channels"] = sorted(olds | set(cfg["channel_allowlist"]))
-            cfg["channel_allowlist"] = []                
+            cfg["channel_allowlist"] = []  # clear legacy
     return data
 
 def is_scam_whitelisted(member: discord.Member, cfg: dict) -> bool:
@@ -7599,21 +7584,21 @@ def update_guild_cfg(guild_id: int, **patch):
     data[g].update(patch)
     save_all_config(data)
 
-                                                          
+# ---------- persistence for actions & feedback ----------
 def load_actions() -> Dict[str, Any]: return _load_json(ACTIONS_PATH, {})
 def save_actions(data: Dict[str, Any]): _save_json(ACTIONS_PATH, data)
 def append_feedback(entry: Dict[str, Any]):
     with open(FEEDBACK_PATH, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-                                                        
+# ================== UI / EMBEDS =======================
 COLOR_OK=0x57F287; COLOR_WARN=0xFEE75C; COLOR_BAD=0xED4245; COLOR_INFO=0xffffff
 def embed_basic(title: str, description: str = "", color: int = COLOR_INFO) -> discord.Embed:
     e = discord.Embed(title=title, description=description, color=color)
     e.set_footer(text="Security & Utilities")
     return e
 
-                                                         
+# ================== PERMS / TEXT HELPERS ===============
 def admin_or_manage_guild(interaction: discord.Interaction) -> bool:
     p = interaction.user.guild_permissions
     return p.administrator or p.manage_guild
@@ -7623,7 +7608,7 @@ def normalize_phrase(text: str) -> str:
     t = " ".join(t.split())
     return t.strip(string.punctuation + " ")
 
-                               
+# --- Link & domain helpers ---
 MD_LINK_RE = re.compile(r"\[[^\]]*\]\((?P<url>[^)]+)\)")
 ANGLED_RE  = re.compile(r"<(?P<url>https?://[^>]+)>", re.I)
 SCHEME_RE  = re.compile(r"https?://(?P<host>[^/\s)]+)", re.I)
@@ -7646,8 +7631,8 @@ def extract_domains(text: str) -> List[str]:
         if h not in seen: out.append(h); seen.add(h)
     return out
 
-                                                         
-                         
+# ================== SCAM DETECTION =====================
+# Keyword/phrase patterns
 SCAM_RULES: List[Tuple[str, re.Pattern]] = [
     ("Fake Nitro", re.compile(r"(?:free|claim|gift).{0,20}\bnitro\b", re.I)),
     ("Wallet Connect / Verify Wallet", re.compile(r"\b(?:connect\s+wallet|wallet\s*connect|verify\s+wallet|sync\s+wallet)\b", re.I)),
@@ -7678,7 +7663,7 @@ def scan_message_for_scams(content: str, cfg: dict) -> List[str]:
     content = content or ""
     norm = normalize_phrase(content)
 
-                      
+    # Phrase allowlist
     if norm in set(cfg.get("phrase_allowlist") or []): return []
 
     domains = extract_domains(content)
@@ -7686,33 +7671,33 @@ def scan_message_for_scams(content: str, cfg: dict) -> List[str]:
     short_allow = [s.lower() for s in (cfg.get("shortener_allowlist") or [])]
     nitro_requires_url = bool(cfg.get("nitro_requires_url", True))
 
-                   
+    # Keyword rules
     for label, pat in SCAM_RULES:
         if not pat.search(content): continue
         if label == "Fake Nitro" and nitro_requires_url and not domains: continue
         hits.append(label)
 
-                  
+    # Domain rules
     for host in domains:
         host = host.lower()
         if domain_is_whitelisted(host, allow): continue
-        if any(host.endswith(s) for s in short_allow):                     
+        if any(host.endswith(s) for s in short_allow):  # allowed shortener
             continue
         if host.startswith("xn--"): hits.append("Punycode/IDN")
         tld = host.rsplit(".", 1)[-1] if "." in host else ""
         if tld in SUSPICIOUS_TLDS: hits.append("Suspicious TLD")
         if root_label(host) in IMPERSONATION_ROOTS: hits.append("Impersonation Domain")
 
-                                              
+    # If only address indicators fired, ignore
     if hits and set(hits).issubset({"Crypto Address (ETH)", "Crypto Address (SOL-like)"}): return []
 
-                             
+    # Dedupe preserving order
     seen, out = set(), []
     for h in hits:
         if h not in seen: out.append(h); seen.add(h)
     return out
 
-                                                         
+# ================== INLINE CODE HELPER =================
 CODEBLOCK_CLOSED_RE = re.compile(r"```(?P<lang>[a-zA-Z0-9_\-]*)\n(?P<code>[\s\S]*?)```", re.MULTILINE)
 CODEBLOCK_UNTERMINATED_RE = re.compile(r"```(?P<lang>[a-zA-Z0-9_\-]*)\n(?P<code>[\s\S]*?)\Z", re.MULTILINE)
 
@@ -7727,7 +7712,7 @@ def try_python_syntax_check(code: str) -> Tuple[bool, str]:
             pointer = f"\n{line_txt}\n{' ' * max(caret_pos,0)}^"
         return False, f"{e.msg} (line {e.lineno}, col {e.offset}){pointer}"
 
-                                                         
+# ================== EVENT GUARD ========================
 JOIN_WINDOW_SECONDS = 60
 join_windows: Dict[int, deque] = defaultdict(lambda: deque(maxlen=2500))
 def record_join(guild_id: int):
@@ -7757,10 +7742,10 @@ async def apply_limited_if_needed(member: discord.Member):
                     ))
             except Exception: pass
 
-                                                         
+# ================== FEEDBACK BUTTONS ===================
 class ScamFeedbackView(discord.ui.View):
     def __init__(self, action_id: str):
-        super().__init__(timeout=None)              
+        super().__init__(timeout=None)  # persistent
         self.action_id = action_id
 
     @discord.ui.button(label="Mark as Scam", style=discord.ButtonStyle.success, custom_id="scamfb:tp")
@@ -7794,7 +7779,7 @@ class ScamFeedbackView(discord.ui.View):
                 update_guild_cfg(payload["guild_id"], phrase_allowlist=sorted(phrases))
                 updated = True
 
-                                                                  
+            # NEW: record who clicked "Not a Scam" for this phrase
             audit = get_guild_cfg(payload["guild_id"]).get("phrase_audit") or {}
             lst = list(audit.get(norm) or [])
             lst.append({"by": interaction.user.id, "ts": int(time.time())})
@@ -7809,7 +7794,7 @@ class ScamFeedbackView(discord.ui.View):
         await interaction.response.send_message(embed=embed_basic("Logged: Not a Scam ❎", "Updated allowlist & recorded feedback." if updated else "Recorded feedback." , COLOR_WARN), ephemeral=True)
 
 
-                          
+# --- separate toggles ---
 @client.tree.command(name="scam_enable", description="Enable Anti-Scam in this channel (log channel required)")
 async def scam_enable(interaction: discord.Interaction):
     if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
@@ -7863,7 +7848,7 @@ async def set_log_channel(interaction: discord.Interaction, channel: discord.Tex
     update_guild_cfg(interaction.guild_id, log_channel_id=channel.id)
     await interaction.response.send_message(embed=embed_basic("Log Channel Set", f"Logs → {channel.mention}", COLOR_OK), ephemeral=True)
 
-                                     
+# --- phrase allowlist management ---
 @client.tree.command(name="allowlist_phrase_add", description="Allow this exact phrase (no links required)")
 @app_commands.describe(phrase="Exact phrase to allow (it will be normalized)")
 async def allowlist_phrase_add(interaction: discord.Interaction, phrase: str):
@@ -7887,7 +7872,7 @@ async def allowlist_phrase_list(interaction: discord.Interaction):
     text = "\n".join(f"• {p}" for p in phrases) or "No phrases."
     await interaction.response.send_message(embed=embed_basic("Phrase Allowlist", text, COLOR_INFO), ephemeral=True)
 
-                     
+# --- diagnostics ---
 @client.tree.command(name="scan_test", description="Test the scam scanner against custom text")
 @app_commands.describe(text="The text to scan (paste your message here)")
 async def scan_test(interaction: discord.Interaction, text: str):
@@ -7931,7 +7916,7 @@ async def whitelisted_phrase(
     phrase: Optional[str] = None,
     action: Optional[Literal["add","remove"]] = None
 ):
-           
+    # perms
     if not admin_or_manage_guild(interaction):
         return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
 
@@ -7939,12 +7924,12 @@ async def whitelisted_phrase(
     phrases = set(cfg.get("phrase_allowlist") or [])
     audit: dict = cfg.get("phrase_audit") or {}
 
-                                                      
+    # helper: render list of all phrases (with counts)
     def render_all():
         if not phrases and not audit:
             return "No phrases recorded."
         lines = []
-                                                            
+        # union of all seen phrases from allowlist and audit
         all_norms = set(phrases) | set(audit.keys())
         for p in sorted(all_norms):
             count = len(audit.get(p, []))
@@ -7952,15 +7937,15 @@ async def whitelisted_phrase(
             lines.append(f"• {p}  | allowlisted: {badge} | logs: {count}")
         return "\n".join(lines)[:3900] or "No phrases recorded."
 
-                                        
+    # Case A: no args → list all phrases
     if phrase is None and action is None:
         e = embed_basic("Whitelisted Phrases (All)", render_all(), COLOR_INFO)
         return await interaction.response.send_message(embed=e, ephemeral=True)
 
-                          
+    # Normalize if present
     norm = normalize_phrase(phrase or "")
 
-                                                                 
+    # Case B: phrase given, no action → show info for that phrase
     if phrase is not None and action is None:
         logs = audit.get(norm, [])
         allowlisted = norm in phrases
@@ -7972,7 +7957,7 @@ async def whitelisted_phrase(
                  f"**Allowlisted:** {'Yes ✅' if allowlisted else 'No —'}",
                  f"**Times logged via Not a Scam:** {len(logs)}"]
         if logs:
-                                          
+            # show up to 10 recent loggers
             logs_sorted = sorted(logs, key=lambda x: x.get("ts", 0), reverse=True)[:10]
             bul = []
             for rec in logs_sorted:
@@ -7986,7 +7971,7 @@ async def whitelisted_phrase(
         e = embed_basic("Phrase Info", "\n".join(lines), COLOR_INFO)
         return await interaction.response.send_message(embed=e, ephemeral=True)
 
-                                        
+    # Case C: phrase + action add/remove
     if action in ("add", "remove") and phrase is not None:
         note = ""
         if action == "add":
@@ -7995,7 +7980,7 @@ async def whitelisted_phrase(
                 note = f"Added “{norm}” to allowlist."
             else:
                 note = f"“{norm}” is already allowlisted."
-                                                         
+            # also add an audit record showing manual add
             lst = list(audit.get(norm) or [])
             lst.append({"by": interaction.user.id, "ts": int(time.time())})
             audit[norm] = lst
@@ -8010,11 +7995,11 @@ async def whitelisted_phrase(
 
         update_guild_cfg(interaction.guild_id, phrase_allowlist=sorted(phrases))
         e = embed_basic("Whitelisted Phrase Updated", note, COLOR_OK if action == "add" else COLOR_WARN)
-                            
+        # show a short recap
         e.add_field(name="Now allowlisted", value=", ".join(sorted(phrases))[:1000] or "—", inline=False)
         return await interaction.response.send_message(embed=e, ephemeral=True)
 
-                                                             
+    # Fallback: if action provided without phrase → show list
     e = embed_basic("Whitelisted Phrases (All)", render_all(), COLOR_INFO)
     return await interaction.response.send_message(embed=e, ephemeral=True)
 
@@ -8030,13 +8015,13 @@ async def scam_whitelist(
     role: Optional[discord.Role] = None,
     action: Optional[Literal["add","remove"]] = None
 ):
-           
+    # perms
     if not admin_or_manage_guild(interaction):
         return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
 
     cfg = get_guild_cfg(interaction.guild_id)
 
-                             
+    # Helper to format the DB
     def render_db(c):
         users = [f"<@{uid}>" for uid in (c.get("scam_user_whitelist") or [])]
         roles = [f"<@&{rid}>" for rid in (c.get("scam_role_whitelist") or [])]
@@ -8046,17 +8031,17 @@ async def scam_whitelist(
         ]
         return "\n".join(lines)
 
-                                                 
+    # If neither user nor role provided → list DB
     if user is None and role is None:
         e = embed_basic("Scam whitelist", render_db(cfg), COLOR_INFO)
         return await interaction.response.send_message(embed=e, ephemeral=True)
 
-                                                                        
+    # If a user/role is provided but action missing → list DB (per spec)
     if action is None:
         e = embed_basic("Scam whitelist (no action specified)", render_db(cfg), COLOR_INFO)
         return await interaction.response.send_message(embed=e, ephemeral=True)
 
-                        
+    # Perform add/remove
     users = set(cfg.get("scam_user_whitelist") or [])
     roles = set(cfg.get("scam_role_whitelist") or [])
     changed = False
@@ -8087,7 +8072,7 @@ async def scam_whitelist(
                          scam_user_whitelist=sorted(users),
                          scam_role_whitelist=sorted(roles))
 
-                              
+    # Show result + current DB
     e = embed_basic(
         f"Scam whitelist: {action}",
         "\n".join(notes) + "\n\n**Current database**\n" + render_db(get_guild_cfg(interaction.guild_id)),
@@ -8095,14 +8080,14 @@ async def scam_whitelist(
     )
     await interaction.response.send_message(embed=e, ephemeral=True)
 
-                                                                     
+# --- helper: parse a single-unit duration like 1y, 1m, 1d, 30min ---
 DURATION_RE = re.compile(r"^(\d+)(y|m|d|min)$", re.I)
 
 def parse_duration_to_timedelta(s: str) -> Optional[float]:
-\
-\
-\
-       
+    """
+    Returns duration in seconds, or None if invalid.
+    y=365d, m=30d, d=1d, min=60s
+    """
     if not s:
         return None
     m = DURATION_RE.match(s.strip())
@@ -8113,9 +8098,9 @@ def parse_duration_to_timedelta(s: str) -> Optional[float]:
     if qty <= 0:
         return None
 
-    if unit == "y":                         
+    if unit == "y":      # 1 year ≈ 365 days
         return qty * 365 * 24 * 3600
-    if unit == "m":                         
+    if unit == "m":      # 1 month ≈ 30 days
         return qty * 30 * 24 * 3600
     if unit == "d":
         return qty * 24 * 3600
@@ -8124,13 +8109,13 @@ def parse_duration_to_timedelta(s: str) -> Optional[float]:
     return None
 
 def fmt_discord_time(dt) -> tuple[str, str]:
-\
-\
-       
+    """
+    Returns (absolute, relative) discord timestamp strings for embeds.
+    """
     ts = int(dt.timestamp())
     return f"<t:{ts}:F>", f"<t:{ts}:R>"
 
-                                                        
+# --- helper to format a list into pages of 10 lines ---
 def _chunk_lines(lines, size=10):
     return [lines[i:i+size] for i in range(0, len(lines), size)] or [[]]
 
@@ -8138,15 +8123,15 @@ class YoungestView(discord.ui.View):
     def __init__(self, duration: str, youngest_tuple, pages):
         super().__init__(timeout=180)
         self.duration = duration
-        self.youngest_tuple = youngest_tuple                                 
-        self.pages = pages                                      
+        self.youngest_tuple = youngest_tuple   # (member, created_at) or None
+        self.pages = pages                     # List[List[str]]
         self.i = 0
 
     def _build_embed(self):
         title = f"Youngest Accounts (younger than {self.duration})"
         e = embed_basic(title, color=COLOR_INFO)
 
-                                              
+        # Youngest overall block (safe length)
         if self.youngest_tuple:
             ym, ydt = self.youngest_tuple
             abs_t, rel_t = fmt_discord_time(ydt)
@@ -8156,7 +8141,7 @@ class YoungestView(discord.ui.View):
                 inline=False
             )
 
-                                                                    
+        # Current page content (max 10 lines; keep under 1024 chars)
         page = self.pages[self.i]
         val = "\n".join(page) or "None found."
         if len(val) > 1024:
@@ -8169,7 +8154,7 @@ class YoungestView(discord.ui.View):
         return e
 
     async def _refresh(self, interaction: discord.Interaction):
-                                 
+        # Disable buttons at ends
         self.prev_button.disabled = (self.i == 0)
         self.next_button.disabled = (self.i >= len(self.pages)-1)
         await interaction.response.edit_message(embed=self._build_embed(), view=self)
@@ -8197,7 +8182,7 @@ class YoungestView(discord.ui.View):
 )
 @app_commands.describe(duration="Single-unit duration: 1y (year), 1m (month≈30d), 1d (day), 30min (minutes)")
 async def youngest(interaction: discord.Interaction, duration: str):
-                       
+    # Validate duration
     secs = parse_duration_to_timedelta(duration)
     if secs is None:
         return await interaction.response.send_message(
@@ -8210,7 +8195,7 @@ async def youngest(interaction: discord.Interaction, duration: str):
     now = discord.utils.utcnow()
     cutoff = now.timestamp() - secs
 
-                                           
+    # Ensure members cache for large guilds
     try:
         await interaction.guild.chunk()
     except Exception:
@@ -8218,7 +8203,7 @@ async def youngest(interaction: discord.Interaction, duration: str):
 
     members = [m for m in interaction.guild.members if not m.bot]
 
-                                                               
+    # Build list of (member, created_at) and filter by duration
     under: list[tuple[discord.Member, datetime]] = []
     youngest_tuple: tuple[discord.Member, datetime] | None = None
 
@@ -8231,16 +8216,16 @@ async def youngest(interaction: discord.Interaction, duration: str):
         if created_ts >= cutoff:
             under.append((m, m.created_at))
 
-                         
+    # Sort youngest first
     under.sort(key=lambda t: t[1], reverse=True)
 
-                                                
+    # Build display lines (mention + timestamps)
     lines = []
     for m, dt in under:
         abs_t, rel_t = fmt_discord_time(dt)
         lines.append(f"• {m.mention} (`{m.id}`) — {abs_t} ({rel_t})")
 
-                                  
+    # Chunk into pages of 10 lines
     pages = _chunk_lines(lines, size=10)
 
     view = YoungestView(duration, youngest_tuple, pages)
@@ -8249,7 +8234,7 @@ async def youngest(interaction: discord.Interaction, duration: str):
 
 
 
-PAGE_SIZE = 20                               
+PAGE_SIZE = 20  # items per page in list tabs
 
 def human_td(delta: timedelta) -> str:
     secs = int(delta.total_seconds())
@@ -8270,21 +8255,21 @@ def bucketize_age(now: datetime, created_at: datetime) -> str:
     return ">3y"
 
 async def scan_inactive_members(guild: discord.Guild, members: list[discord.Member], history_days: int = 90) -> list[discord.Member]:
-\
-\
-\
-\
-       
+    """
+    Returns members who have not sent any message since they joined the server.
+    We scan text channels the bot can read, back to either each member's joined_at
+    or up to `history_days` (cap) — whichever is *newer*. This keeps the sweep practical.
+    """
     now = discord.utils.utcnow()
     since_floor = now - timedelta(days=history_days)
-                                                                                
+    # Build a per-member earliest date to check (joined_at but not before floor)
     earliest: dict[int, datetime] = {}
     for m in members:
         if not m.bot:
             joined = (m.joined_at or now).replace(tzinfo=timezone.utc)
             earliest[m.id] = max(joined, since_floor)
 
-                                                                           
+    # Collect authors who have any message after their 'earliest' threshold
     has_activity: set[int] = set()
     for channel in guild.text_channels:
         perms = channel.permissions_for(guild.me)
@@ -8295,14 +8280,14 @@ async def scan_inactive_members(guild: discord.Guild, members: list[discord.Memb
                 mid = msg.author.id
                 if mid in earliest and msg.created_at.replace(tzinfo=timezone.utc) >= earliest[mid]:
                     has_activity.add(mid)
-                                                                     
+                # Short-circuit if we’ve already seen everyone active
                 if len(has_activity) >= len(earliest):
                     break
         except (discord.Forbidden, discord.HTTPException):
             continue
 
     inactive = [m for m in members if (not m.bot) and (m.id in earliest) and (m.id not in has_activity)]
-                                                           
+    # Sort newest joiners first to help mods quickly review
     inactive.sort(key=lambda x: x.joined_at or now, reverse=True)
     return inactive
 
@@ -8319,7 +8304,7 @@ def build_overview_embed(guild: discord.Guild, members: list[discord.Member]) ->
     youngest = max(humans, key=lambda m: m.created_at)
     oldest   = min(humans, key=lambda m: m.created_at)
 
-                
+    # thresholds
     lt_1d = sum(1 for m in humans if now - m.created_at <= timedelta(days=1))
     lt_1w = sum(1 for m in humans if now - m.created_at <= timedelta(weeks=1))
     lt_1m = sum(1 for m in humans if now - m.created_at <= timedelta(days=30))
@@ -8342,16 +8327,16 @@ def build_overview_embed(guild: discord.Guild, members: list[discord.Member]) ->
     return e
 
 def build_top_roles_embed(guild: discord.Guild, members: list[discord.Member], page:int=0) -> tuple[discord.Embed,int]:
-                                                
+    # Count members per role (exclude @everyone)
     counts: dict[int, int] = {}
     for m in members:
         for r in m.roles:
-            if r.is_default():             
+            if r.is_default():  # @everyone
                 continue
             counts[r.id] = counts.get(r.id, 0) + 1
     sorted_roles = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
 
-                         
+    # paginate roles list
     total_pages = max(1, math.ceil(len(sorted_roles)/PAGE_SIZE))
     page = max(0, min(page, total_pages-1))
     start = page*PAGE_SIZE
@@ -8391,7 +8376,7 @@ def build_age_graph(members: list[discord.Member]) -> io.BytesIO:
         b = bucketize_age(now, m.created_at.replace(tzinfo=timezone.utc))
         counts[b] += 1
 
-          
+    # plot
     fig, ax = plt.subplots(figsize=(6,3.2), dpi=180)
     ax.bar(buckets, [counts[k] for k in buckets])
     ax.set_xlabel("Account age")
@@ -8410,7 +8395,7 @@ class MemberStatsView(discord.ui.View):
         super().__init__(timeout=300)
         self.guild = guild
         self.members = members
-        self.tab = "overview"                            
+        self.tab = "overview"  # overview | roles | graph
         self.page = 0
         self.total_pages = 1
 
@@ -8433,7 +8418,7 @@ class MemberStatsView(discord.ui.View):
             self.page = 0
             await interaction.response.edit_message(embed=e, attachments=[file], view=self)
 
-                                   
+    # -------- Tab buttons --------
     @discord.ui.button(label="Overview", style=discord.ButtonStyle.primary)
     async def tab_overview(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.tab = "overview"; self.page = 0
@@ -8449,7 +8434,7 @@ class MemberStatsView(discord.ui.View):
         self.tab = "graph"; self.page = 0
         await self.refresh(interaction)
 
-                                                              
+    # -------- Pager buttons (only used on Roles tab) --------
     @discord.ui.button(label="Prev", style=discord.ButtonStyle.success)
     async def pager_prev(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.tab != "roles":
@@ -8474,14 +8459,14 @@ class MemberStatsView(discord.ui.View):
     description="Advanced member analytics: overview, top roles, and age graph."
 )
 async def server_member_stats(interaction: discord.Interaction):
-                                 
+    # Admins / Manage Server only
     if not admin_or_manage_guild(interaction):
         return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
 
     guild = interaction.guild
-    await interaction.response.defer()                                 
+    await interaction.response.defer()  # quick defer to avoid timeouts
 
-                                                       
+    # Ensure member cache (especially for large guilds)
     try:
         await guild.chunk()
     except Exception:
@@ -8489,7 +8474,7 @@ async def server_member_stats(interaction: discord.Interaction):
 
     members = list(guild.members)
 
-                                               
+    # Initial view: Overview (no inactive scan)
     view = MemberStatsView(guild, members)
     embed = build_overview_embed(guild, members)
     await interaction.followup.send(embed=embed, view=view)
@@ -8509,7 +8494,7 @@ async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
     action = entry.action.name
     timestamp = datetime.now(timezone.utc)
 
-                           
+    # Format target display
     if isinstance(target, discord.User):
         target_display = f"{target.name}#{target.discriminator}"
     elif isinstance(target, discord.TextChannel):
@@ -8523,11 +8508,11 @@ async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
 
     summary_title = f"{user.name} {action.replace('_', ' ')} {target_display}"
 
-                  
+    # Save to file
     log_entry = f"{timestamp.isoformat()} | Action: {action} | By: {user} {user.id} | On: {target_display} | Reason: {reason}"
     append_audit_log(guild.id, log_entry)
 
-                
+    # Send embed
     channel_id = config[gid].get("channel")
     if channel_id:
         channel = guild.get_channel(channel_id)
@@ -8544,7 +8529,7 @@ async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
             embed.add_field(name="Reason", value=reason, inline=False)
             embed.add_field(name="Time", value=format_dt(timestamp, style='F'), inline=False)
 
-                                                                    
+            # Extra: If this is MESSAGE_DELETE, add the channel name
             if entry.action.name == "message_delete":
                 if isinstance(target, discord.Message):
                     embed.add_field(name="Deleted In", value=f"<#{target.channel.id}>", inline=False)
@@ -8558,7 +8543,7 @@ async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
 
 PRIVACY_FILE = "presence_privacy.json"
 
-                                                    
+# ---------------- JSON LOAD / SAVE ----------------
 
 def load_privacy() -> set[int]:
     if not os.path.exists(PRIVACY_FILE):
@@ -8576,7 +8561,7 @@ def save_privacy(data: set[int]):
 PRIVACY_SET = load_privacy()
 
 
-                                                  
+# ---------------- PAGINATOR VIEW ----------------
 
 class PresencePaginator(discord.ui.View):
     def __init__(self, pages, author_id):
@@ -8612,7 +8597,7 @@ class PresencePaginator(discord.ui.View):
         await self.update(interaction)
 
 
-                                                             
+# ---------------- COMMAND: presence_privacy ----------------
 
 @client.tree.command(name="presence_privacy", description="Opt in/out of presence tracking globally.")
 @app_commands.describe(turn_off="Yes = opt-out | No = opt-in")
@@ -8636,7 +8621,7 @@ async def presence_privacy(interaction: discord.Interaction, turn_off: app_comma
     await interaction.response.send_message(msg, ephemeral=True)
 
 
-                                                                   
+# ---------------- COMMAND: server_member_activity ----------------
 
 @client.tree.command(name="server_member_activity", description="View members by presence status or stats.")
 @app_commands.choices(status=[
@@ -8651,10 +8636,10 @@ async def server_member_activity(interaction: discord.Interaction, status: app_c
     if not guild:
         return await interaction.response.send_message("Command must be used in a server.", ephemeral=True)
 
-                                         
+    # Filter out opted-out members + bots
     tracked = [m for m in guild.members if not m.bot and m.id not in PRIVACY_SET]
 
-                                                              
+    # ---------------------- STATS MODE ----------------------
     if status.value == "stats":
 
         total_members = guild.member_count
@@ -8677,7 +8662,7 @@ async def server_member_activity(interaction: discord.Interaction, status: app_c
 
         return await interaction.response.send_message(embed=embed)
 
-                                                             
+    # ---------------------- LIST MODE ----------------------
 
     status_map = {
         "online": discord.Status.online,
@@ -8729,7 +8714,7 @@ async def top_games(interaction: discord.Interaction):
         if member.bot or member.id in PRIVACY_SET:
             continue
 
-                                     
+        # Inspect presence activities
         for activity in member.activities:
             if isinstance(activity, discord.Game):
                 game_counter[activity.name] += 1
@@ -8756,7 +8741,7 @@ async def top_games(interaction: discord.Interaction):
 @app_commands.describe(user="The user to check.")
 async def now_playing(interaction: discord.Interaction, user: discord.Member):
 
-                                     
+    # Respect global presence privacy
     if user.id in PRIVACY_SET:
         return await interaction.response.send_message(
             "❌ This user has opted out of presence tracking.",
@@ -8770,7 +8755,7 @@ async def now_playing(interaction: discord.Interaction, user: discord.Member):
             ephemeral=True
         )
 
-                                                           
+    # Make sure we are using a Member object from the guild
     member = guild.get_member(user.id) or user
 
     embed = discord.Embed(
@@ -8788,7 +8773,7 @@ async def now_playing(interaction: discord.Interaction, user: discord.Member):
 
     for activity in activities:
 
-              
+        # Game
         if isinstance(activity, discord.Game):
             embed.add_field(
                 name="Playing",
@@ -8797,7 +8782,7 @@ async def now_playing(interaction: discord.Interaction, user: discord.Member):
             )
             activity_found = True
 
-                 
+        # Spotify
         elif isinstance(activity, discord.Spotify):
             embed.add_field(
                 name="> Listening on Spotify",
@@ -8806,7 +8791,7 @@ async def now_playing(interaction: discord.Interaction, user: discord.Member):
             )
             activity_found = True
 
-                   
+        # Streaming
         elif isinstance(activity, discord.Streaming):
             embed.add_field(
                 name="> Streaming",
@@ -8815,7 +8800,7 @@ async def now_playing(interaction: discord.Interaction, user: discord.Member):
             )
             activity_found = True
 
-                       
+        # Custom status
         elif isinstance(activity, discord.CustomActivity):
             if activity.name:
                 embed.add_field(
@@ -8825,7 +8810,7 @@ async def now_playing(interaction: discord.Interaction, user: discord.Member):
                 )
                 activity_found = True
 
-                                           
+        # Fallback for other Activity types
         else:
             if activity.name:
                 embed.add_field(
@@ -8840,6 +8825,47 @@ async def now_playing(interaction: discord.Interaction, user: discord.Member):
 
     await interaction.response.send_message(embed=embed)
 
+@client.tree.command(
+    name="role_presence_stats",
+    description="View presence stats for a specific role."
+)
+@app_commands.describe(role="Role to include in the stats.")
+async def role_presence_stats(
+    interaction: discord.Interaction,
+    role: discord.Role,
+):
+    guild = interaction.guild
+    if not guild:
+        return await interaction.response.send_message(
+            "This command must be used in a server.", ephemeral=True
+        )
+
+    # Respect your existing privacy set
+    tracked = [m for m in guild.members if not m.bot and m.id not in PRIVACY_SET]
+
+    members = [m for m in tracked if role in m.roles]
+    if not members:
+        return await interaction.response.send_message(
+            f"No tracked members have the role {role.mention}.",
+            ephemeral=True
+        )
+
+    online = sum(1 for m in members if m.status == discord.Status.online)
+    idle = sum(1 for m in members if m.status == discord.Status.idle)
+    dnd = sum(1 for m in members if m.status == discord.Status.dnd)
+    off = sum(1 for m in members if m.status == discord.Status.offline)
+
+    embed = discord.Embed(
+        title=f"Presence Stats per Role – {role.name}",
+        color=0xffffff
+    )
+    embed.add_field(name="Online", value=str(online))
+    embed.add_field(name="Idle", value=str(idle))
+    embed.add_field(name="DND", value=str(dnd))
+    embed.add_field(name="Offline", value=str(off))
+    embed.set_footer(text="Users who opted out of presence tracking are excluded.")
+
+    await interaction.response.send_message(embed=embed)
 
 
 @client.event
@@ -8886,10 +8912,10 @@ async def on_message(message: discord.Message):
     if message.guild is None or message.author.bot: return
     cfg = get_guild_cfg(message.guild.id)
 
-                                                                       
-                                                                       
+    # --- Scam Shield (only in scam_channels, requires log channel) ---
+    # --- Scam Shield (only in scam_channels, requires log channel) ---
     if cfg.get("log_channel_id") and message.channel.id in set(cfg.get("scam_channels") or []):
-                                                       
+        # NEW: skip completely if author is whitelisted
         if is_scam_whitelisted(message.author, cfg):
             return
 
@@ -8900,7 +8926,7 @@ async def on_message(message: discord.Message):
                 if em.description: reasons += scan_message_for_scams(em.description, cfg)
                 for f in em.fields: reasons += scan_message_for_scams(f"{f.name or ''} {f.value or ''}", cfg)
         except Exception: pass
-                
+        # dedupe
         s, ordered = set(), []
         for r in reasons:
             if r not in s: ordered.append(r); s.add(r)
@@ -8943,9 +8969,9 @@ async def on_message(message: discord.Message):
                 ))
             except Exception: pass
 
-            return                                            
+            return  # don’t run code helper on flagged content
 
-                                                              
+    # --- Inline Code Helper (only in codehelper_channels) ---
     if message.channel.id in set(cfg.get("codehelper_channels") or []):
         handled = 0
         for m in CODEBLOCK_CLOSED_RE.finditer(message.content or ""):
@@ -8970,7 +8996,7 @@ async def on_message(message: discord.Message):
                     await message.reply(embed=e, mention_author=False)
     
 
-                                                                                                 
+########################################## CLIENT LOAD ##########################################
 
 client.run(os.getenv("DISCORD_TOKEN"))
   
