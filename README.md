@@ -1,6 +1,5 @@
 # Equinox
 
-<img src="assets/Equinox_pfp.png" alt="Equinox Logo" width="150"/>
 
 Discord bot built with discord.py. Provides moderation, security, utility, gacha, giveaways, ticket systems, verification, premium subscriptions, and presence tracking.
 
