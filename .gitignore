@@ -1,0 +1,45 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data files (user data)
+userinventory.json
+user_verifying.json
+verify_system.json
+guild_config.json
+scam_actions.json
+scam_feedback.jsonl
+audit_config.json
+audit_logs/
+    privacy_settings.json
+reaction_roles.json
+command_stats.json
+geminiServer.json
+lifetime_user.json
+monthly_user.json
+yearly_user.json
+monthcode.json
+yearlycode.json
+lifetimecode.json
+
+# Auto-generated
+autoping_data/
+autorole_data/
+messageCounterData/
+giveawayFolder/
+ticket-json/
+data_assets/
