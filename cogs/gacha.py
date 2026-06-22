@@ -18,7 +18,7 @@ async def gacha_stats(interaction: discord.Interaction, member: discord.Member):
     FlexButton = _sys.modules["__main__"].FlexButton
     await interaction.response.defer(ephemeral=True)
     msg = await interaction.followup.send("Retrieving your data please wait... <a:loading_symbol:1295113412564615249>")
-    with open(f'userinventory.json', 'r') as f:
+    with open(f'data/userinventory.json', 'r') as f:
         user_data = json.load(f)
 
     userid = []
@@ -54,7 +54,7 @@ async def gacha_stats(interaction: discord.Interaction, member: discord.Member):
         user_items = []
         user_items_order = []
         gif = 0
-        with open(f'userinventory.json', 'r') as f:
+        with open(f'data/userinventory.json', 'r') as f:
             user_data = json.load(f)
 
         for user_data_flex in range(len(user_data['user'])):
@@ -136,13 +136,13 @@ class GachaCog(commands.Cog):
       refresh = _sys.modules["__main__"].refresh
       await interaction.response.defer()
       refresh()
-      with open("userinventory.json") as f:
+      with open("data/userinventory.json") as f:
         users = json.load(f)
       userid_list = []
       for user in users["user"]:
         userid_list.append(user["userid"])
       if interaction.user.id not in userid_list:
-        def add_json(new_data, filename='userinventory.json'):
+        def add_json(new_data, filename='data/userinventory.json'):
           with open(filename,'r+') as file:
               file_data = json.load(file)
               file_data["user"].append(new_data)
@@ -185,7 +185,7 @@ class GachaCog(commands.Cog):
       elif item != None:
         roll_item = ["Fortune Drink", "Witch's Potion", "Divine Fluid", "Angel Dust", "Me When Im Lucky", "Touch of Divinity", "Trio Charm"]
         user_inventory_item = []
-        with open("userinventory.json") as f:
+        with open("data/userinventory.json") as f:
           users = json.load(f)
         for user in users["user"]:
           if user["userid"] == interaction.user.id:
@@ -194,7 +194,7 @@ class GachaCog(commands.Cog):
                 if inventory_roll_name in roll_item:
                   user_inventory_item.append(inventory_roll_name)
         if item.name in user_inventory_item:
-          def add_json(new_data, filename='userinventory.json'):
+          def add_json(new_data, filename='data/userinventory.json'):
             with open(filename,'r+') as file:
                 file_data = json.load(file)
                 for users in file_data["user"]:
@@ -208,7 +208,7 @@ class GachaCog(commands.Cog):
             able_to_roll = False
           else:
             able_to_roll = True
-            with open('userinventory.json', 'r') as f:
+            with open('data/userinventory.json', 'r') as f:
               json_data = json.load(f)
 
             index = 0
@@ -218,7 +218,7 @@ class GachaCog(commands.Cog):
 
             json_data['user'][index]['inventory'][0][item.name] -= 1
 
-            with open('userinventory.json', 'w') as f:
+            with open('data/userinventory.json', 'w') as f:
               json.dump(json_data, f, indent=2)
 
             if item.name == "Fortune Drink":
@@ -318,18 +318,18 @@ class GachaCog(commands.Cog):
         mbed.set_footer(text=f"Rolled by {interaction.user}", icon_url=interaction.user.avatar)
         await sleep(time)
         await interaction.edit_original_response(embed=mbed)
-        with open(f'userinventory.json', 'r') as f:
+        with open(f'data/userinventory.json', 'r') as f:
           user_data = json.load(f)
 
         for user_data_index in range(len(user_data['user'])):
           if user_data['user'][user_data_index]['userid'] == interaction.user.id:
             user_data['user'][user_data_index]['roll'] += 1
 
-        with open(f'userinventory.json', 'w') as f:
+        with open(f'data/userinventory.json', 'w') as f:
           json.dump(user_data, f, indent=2)      
         rolle_name = name[0]
         user_inventory_item = []
-        with open("userinventory.json") as f:
+        with open("data/userinventory.json") as f:
           users = json.load(f)
         for user in users["user"]:
           if user["userid"] == interaction.user.id:
@@ -337,7 +337,7 @@ class GachaCog(commands.Cog):
               for inventory_roll_name in key:
                 user_inventory_item.append(inventory_roll_name)
         if rolle_name not in user_inventory_item:
-          def add_json(new_data, filename='userinventory.json'):
+          def add_json(new_data, filename='data/userinventory.json'):
             with open(filename,'r+') as file:
                 file_data = json.load(file)
                 for users in file_data["user"]:
@@ -349,7 +349,7 @@ class GachaCog(commands.Cog):
           y = rolle_name
           add_json(y)
         else:
-          def add_json(new_data, filename='userinventory.json'):
+          def add_json(new_data, filename='data/userinventory.json'):
             with open(filename,'r+') as file:
                 file_data = json.load(file)
                 for users in file_data["user"]:
@@ -375,7 +375,7 @@ class GachaCog(commands.Cog):
       msg = await interaction.followup.send("Retrieving your data please wait... <a:loading_symbol:1295113412564615249>")
       if member == None:
         member = interaction.user
-      with open(f'userinventory.json', 'r') as f:
+      with open(f'data/userinventory.json', 'r') as f:
         user_data = json.load(f)
 
       userid = []
@@ -411,7 +411,7 @@ class GachaCog(commands.Cog):
         user_items = []
         user_items_order = []
         gif = 0
-        with open(f'userinventory.json', 'r') as f:
+        with open(f'data/userinventory.json', 'r') as f:
           user_data = json.load(f)
 
         for user_data_flex in range(len(user_data['user'])):
@@ -492,7 +492,7 @@ class GachaCog(commands.Cog):
 
       embed.set_thumbnail(url=member.display_avatar.url)
 
-      with open("userinventory.json", "r") as f:
+      with open("data/userinventory.json", "r") as f:
         json_data = json.load(f)
 
       target_user = next(
@@ -608,7 +608,7 @@ class GachaCog(commands.Cog):
       refresh = _sys.modules["__main__"].refresh
       active, tier, expires = await is_premium(interaction.user.id)
       if active:
-        with open('userinventory.json', 'r') as f:
+        with open('data/userinventory.json', 'r') as f:
           json_data = json.load(f)
         user_id = []
         index = 0
@@ -618,7 +618,7 @@ class GachaCog(commands.Cog):
         if interaction.user.id not in user_id:
           await interaction.response.send_message(embed=discord.Embed(title="Daily Error...", description="You do not have a paired database.\nCreate a database by rolling\nUse **/roll**", color=0xffffff))
         else:
-          with open('userinventory.json', 'r') as f:
+          with open('data/userinventory.json', 'r') as f:
             json_data = json.load(f)  
 
           index = None
@@ -643,7 +643,7 @@ class GachaCog(commands.Cog):
             elif user_daily_item[i] not in user_item:
               json_data['user'][index]['inventory'][0][user_daily_item[i]] = 1
         
-          with open(f'userinventory.json', 'w') as f:
+          with open(f'data/userinventory.json', 'w') as f:
             json.dump(json_data, f, indent=2)
           await interaction.response.defer()
           msg = await interaction.followup.send(embed=discord.Embed(title="Opening Chest...", color=0xffffff))
@@ -693,7 +693,7 @@ class GachaCog(commands.Cog):
         requirements, required_amount = crafting_recipes.get(item.name, ([], []))
 
                              
-        with open("userinventory.json") as f:
+        with open("data/userinventory.json") as f:
             users = json.load(f)
 
                                
@@ -733,7 +733,7 @@ class GachaCog(commands.Cog):
             user_inventory_items.append(item.name)
 
                                                  
-        with open("userinventory.json", 'r+') as file:
+        with open("data/userinventory.json", 'r+') as file:
             file_data = json.load(file)
             for user in file_data["user"]:
                 if user["userid"] == interaction.user.id:

@@ -27,13 +27,13 @@ class PremiumCog(commands.Cog):
     async def login(self, interaction: discord.Interaction):
       import sys as _sys
       LoginModal = _sys.modules["__main__"].LoginModal
-      with open("userinventory.json") as f:
+      with open("data/userinventory.json") as f:
         users = json.load(f)
       userid_list = []
       for user in users["user"]:
         userid_list.append(user["userid"])
       if interaction.user.id not in userid_list:
-        def add_json(new_data, filename='userinventory.json'):
+        def add_json(new_data, filename='data/userinventory.json'):
           with open(filename,'r+') as file:
               file_data = json.load(file)
               file_data["user"].append(new_data)
@@ -420,7 +420,7 @@ class PremiumCog(commands.Cog):
                                                 
         ticket = 'ticket-json'
         try:
-            with open("verify_system.json", encoding="utf-8") as f:
+            with open("data/verify_system.json", encoding="utf-8") as f:
                 verify_json = json.load(f)
             verify_count = len(verify_json.get("guilds", []))
         except FileNotFoundError:

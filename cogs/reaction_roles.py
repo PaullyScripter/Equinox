@@ -6,7 +6,7 @@ from typing import Optional, Literal
 from datetime import datetime, timezone, timedelta
 import json, random, asyncio, re, math, io, os
 
-data_file = 'reactionroles.json'
+data_file = 'data/reactionroles.json'
 def load_data():
     if not os.path.exists(data_file):
         return {}

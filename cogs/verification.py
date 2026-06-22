@@ -100,7 +100,7 @@ class VerificationCog(commands.Cog):
         rev_role_id = rev_role.id if rev_role else None
         add_role_id = add_role.id if add_role else None
     
-        with open('verify_system.json', 'r') as f:
+        with open('data/verify_system.json', 'r') as f:
             json_data = json.load(f)
 
         existing_ids = {g['guildid'] for g in json_data.get('guilds', [])}
@@ -128,7 +128,7 @@ class VerificationCog(commands.Cog):
             "messageid": msg.id
         })
     
-        with open('verify_system.json', 'w') as f:
+        with open('data/verify_system.json', 'w') as f:
             json.dump(json_data, f, indent=2)
 
 
