@@ -59,6 +59,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 email_password = os.getenv("email_password")
 email_sender = os.getenv("email_sender")
 
+os.makedirs("data", exist_ok=True)
+
 intents = discord.Intents.default()
 
 intents.members = True                      
@@ -128,7 +130,7 @@ class PersistentViewBot(commands.Bot):
         await self.http_session.close()
         await super().close()
 
-STATS_FILE = "command_stats.json"
+STATS_FILE = "data/command_stats.json"
 devs = [
     857932717681147954,
     1430719406022983740,
@@ -186,12 +188,17 @@ client.monthly_user = []
 client.yearly_user = []
 
 def read_json(filename):
- with open(f"{filename}.json", "r") as file:
-    data = json.load(file)
- return data
+ try:
+  with open(f"data/{filename}.json", "r") as file:
+     data = json.load(file)
+  return data
+ except FileNotFoundError:
+  data = {}
+  write_json(data, filename)
+  return data
 
 def write_json(data, filename):
- with open(f"{filename}.json", "w") as file:
+ with open(f"data/{filename}.json", "w") as file:
      json.dump(data, file, indent=4)
 
 def refresh():
@@ -257,9 +264,9 @@ async def is_premium(discord_id: int) -> Tuple[bool, Optional[str], Optional[str
 MONTH_DAYS = 30                                              
 YEAR_DAYS  = 365
 SUB_FILES = {
-    "monthly":  "monthly_user.json",
-    "yearly":   "yearly_user.json",
-    "lifetime": "lifetime_user.json",
+        "monthly": "data/monthly_user.json",
+        "yearly": "data/yearly_user.json",
+        "lifetime": "data/lifetime_user.json",
 }
 
 def utcnow_iso():
@@ -585,7 +592,7 @@ class BuyPremium(View):
     self.add_item(button)
 
 
-PRIVACY_FILE = "privacy_settings.json"
+PRIVACY_FILE = "data/privacy_settings.json"
 
 def load_privacy_settings() -> dict:
     if not os.path.exists(PRIVACY_FILE):
@@ -617,7 +624,7 @@ def reload_privacy_sets():
 reload_privacy_sets()
 
 VERIFYING_USERS: set[tuple[int, int]] = set()
-VERIFYING_FILE = "user_verifying.json"
+VERIFYING_FILE = "data/user_verifying.json"
 
 def load_verifying_users() -> set[tuple[int, int]]:
     if not os.path.exists(VERIFYING_FILE):
@@ -924,7 +931,7 @@ class LoginModal(ui.Modal, title="Email"):
   async def on_submit(self, interaction: discord.Interaction):
     channel = client.get_channel(1242633669890277456)
     msg = await channel.send(self.email)
-    with open('userinventory.json', 'r') as f:
+    with open('data/userinventory.json', 'r') as f:
       json_data = json.load(f)
 
     index = 0
@@ -942,7 +949,7 @@ class LoginModal(ui.Modal, title="Email"):
       msg2 = await interaction.followup.send(content="You do not have any credentials paired with your databases, can I send a code to your input email?", view=view)
       view.message = msg2
     else:
-      def add_json(filename='userinventory.json'):
+      def add_json(filename='data/userinventory.json'):
         with open(filename,'r+') as file:
             file_data = json.load(file)
             for users in file_data["user"]:
@@ -953,7 +960,7 @@ class LoginModal(ui.Modal, title="Email"):
       if msg.content == add_json():
         title = "You have successfully logged in."
         description = "You can now use login required commands."
-        with open('userinventory.json', 'r') as f:
+        with open('data/userinventory.json', 'r') as f:
           json_data = json.load(f)
 
         index = 0
@@ -963,7 +970,7 @@ class LoginModal(ui.Modal, title="Email"):
 
         json_data['user'][index]['eligible'] = True
 
-        with open('userinventory.json', 'w') as f:
+        with open('data/userinventory.json', 'w') as f:
           json.dump(json_data, f, indent=2)
       else:
         title = "You have failed to log in"
@@ -981,7 +988,7 @@ class ResetButton(discord.ui.View):
     if interaction.user.id == self.authorID:
       Button.disabled = True
       user_database = []
-      with open('userinventory.json', 'r') as f:
+      with open('data/userinventory.json', 'r') as f:
         json_data = json.load(f)
 
       index = 0
@@ -997,7 +1004,7 @@ class ResetButton(discord.ui.View):
           key.append(value)
 
       if 'eligible' in key:
-        with open('userinventory.json', 'r') as f:
+        with open('data/userinventory.json', 'r') as f:
           json_data = json.load(f)
 
         index = 0
@@ -1007,7 +1014,7 @@ class ResetButton(discord.ui.View):
 
         del json_data['user'][index]
 
-        with open('userinventory.json', 'w') as f:
+        with open('data/userinventory.json', 'w') as f:
           json.dump(json_data, f, indent=2)
 
         await interaction.response.edit_message(embed=discord.Embed(title="All your data have been reseted", description="> To collect items again, use **/roll**\n> To craft, use **/craft**\n> To show inventory, use **/inventory**", color = 0xffffff), view=self)
@@ -1165,7 +1172,7 @@ class VerifyButton(discord.ui.View):
     super().__init__(timeout=None)
   @discord.ui.button(label="Start the verify progress", style=discord.ButtonStyle.green, custom_id="verifybutton")
   async def verifybutton(self, interaction: discord.Interaction, Button: discord.Button):
-    with open(f'verify_system.json', 'r') as f:
+    with open(f'data/verify_system.json', 'r') as f:
       guild_data = json.load(f)
 
     guild_ids = {g['guildid'] for g in guild_data.get('guilds', [])}
@@ -1208,14 +1215,14 @@ class DeleteVerifySystem(discord.ui.View):
   @discord.ui.button(label="Delete Verify System (owner only)", style=discord.ButtonStyle.red)
   async def deleteverifysystem(self, interaction: discord.Interaction, Button: discord.Button):
     if interaction.user.id == interaction.guild.owner_id:
-      with open(f'verify_system.json', 'r') as f:
+      with open(f'data/verify_system.json', 'r') as f:
         json_data = json.load(f)
 
       for index in range(len(json_data['guilds'])):
         if json_data['guilds'][index]['guildid'] == interaction.guild.id:
           del json_data['guilds'][index]
 
-      with open(f'verify_system.json', 'w') as f:
+      with open(f'data/verify_system.json', 'w') as f:
         json.dump(json_data, f, indent=2)
 
 
@@ -2740,13 +2747,13 @@ class RemoveGeminiView(discord.ui.View):
 
 
 def load_gemini_servers():
-    if not os.path.exists("geminiServer.json"):
+    if not os.path.exists("data/geminiServer.json"):
         return {"servers": []}
-    with open("geminiServer.json", "r") as f:
+    with open("data/geminiServer.json", "r") as f:
         return json.load(f)
 
 def save_gemini_servers(data):
-    with open("geminiServer.json", "w") as f:
+    with open("data/geminiServer.json", "w") as f:
         json.dump(data, f, indent=2)
 
                          
@@ -3096,7 +3103,7 @@ class UpdateButton(discord.ui.View):
     embed = discord.Embed(title=f"Equinox's Update - {update}", description=update_note_content, color=0xffffff)
     await interaction.followup.send(embed=embed, ephemeral=True)
 
-data_file = 'reaction_roles.json'
+data_file = 'data/reaction_roles.json'
 if not os.path.exists(data_file):
     with open(data_file, 'w') as f:
         json.dump({}, f)
@@ -3215,13 +3222,13 @@ class ReactionRoleDropdown(discord.ui.Select):
 
 
 def load_audit_config():
-    if not os.path.exists("audit_config.json"):
+    if not os.path.exists("data/audit_config.json"):
         return {}
-    with open("audit_config.json", "r") as f:
+    with open("data/audit_config.json", "r") as f:
         return json.load(f)
 
 def save_audit_config(data):
-    with open("audit_config.json", "w") as f:
+    with open("data/audit_config.json", "w") as f:
         json.dump(data, f, indent=4)
 
 def append_audit_log(guild_id: int, entry: str):
@@ -3236,9 +3243,9 @@ def read_audit_log(guild_id: int):
     with open(path, "r", encoding="utf-8") as f:
         return f.readlines()
 
-CONFIG_PATH   = "guild_config.json"                          
-ACTIONS_PATH  = "scam_actions.json"                              
-FEEDBACK_PATH = "scam_feedback.jsonl"                                 
+CONFIG_PATH = "data/guild_config.json"
+ACTIONS_PATH = "data/scam_actions.json"
+FEEDBACK_PATH = "data/scam_feedback.jsonl"
 
 DEFAULTS = {
                               
@@ -3912,6 +3919,14 @@ async def sync(interaction: discord.Interaction):
         await interaction.response.send_message(f"Synced {len(synced)} command(s)")
     else:
         await interaction.response.send_message('You must be the owner to use this command!')
+
+_EMPTY_STRUCTURES = {
+    "userinventory": {"user": []},
+    "verify_system": {"guilds": []},
+}
+for _fname, _default in _EMPTY_STRUCTURES.items():
+    if not os.path.exists(f"data/{_fname}.json"):
+        write_json(_default, _fname)
 
 client.run(os.getenv("DISCORD_TOKEN"))
   

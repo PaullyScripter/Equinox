@@ -64,7 +64,7 @@ class UtilityCog(commands.Cog):
         footer = f"Embed created by {interaction.user} | 🤍 Equinox Embeds"
       embed.set_footer(text=footer)
       await interaction.response.defer()
-      await interaction.followup.send(file=discord.File("data_assets/embed_guide.png"), content="Embed's guide", ephemeral=True)
+      await interaction.followup.send(file=discord.File("assets/embed_guide.png"), content="Embed's guide", ephemeral=True)
       msg_1 = await interaction.channel.send(f"{interaction.user.mention} How many fields does your embed need? (Answer in number, if not needed say 0)")
       msg_2 = await self.bot.wait_for('message', check=lambda message: message.author == interaction.user)
       if int(msg_2.content) > 0:
