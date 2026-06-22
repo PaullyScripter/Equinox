@@ -1,138 +1,129 @@
-<div align="center">
-  <img src="assets/Equinox_pfp.png" alt="Equinox Logo" width="150" style="border-radius: 50%;"/>
-  
-  # ☀️ Equinox
-  
-  ### *Your All-in-One Discord Companion*
-  
-  [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/Cu8JR7Vsvx)
-  [![Dashboard](https://img.shields.io/badge/Dashboard-Visit-00C7B7?style=for-the-badge&logo=netlify&logoColor=white)](https://equinoxbot.netlify.app)
-  [![Docs](https://img.shields.io/badge/Documentation-Read-8B5CF6?style=for-the-badge&logo=readthedocs&logoColor=white)](https://equinoxbot.netlify.app/docs)
-  [![License](https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge&logo=gnu&logoColor=white)](LICENSE)
-  [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-  
-  ---
-  
-  **Equinox** is a powerful, multipurpose Discord bot built with `discord.py`. It brings together **moderation**, **security**, **utility**, **gacha games**, **giveaways**, **ticket systems**, **verification**, **premium subscriptions**, **presence tracking**, and much more — all in one sleek package.
-  
-</div>
+# Equinox
+
+<img src="assets/Equinox_pfp.png" alt="Equinox Logo" width="150"/>
+
+Discord bot built with discord.py. Provides moderation, security, utility, gacha, giveaways, ticket systems, verification, premium subscriptions, and presence tracking.
+
+- Dashboard: https://equinoxbot.netlify.app
+- Documentation: https://equinoxbot.netlify.app/docs
+- Support Server: https://discord.gg/Cu8JR7Vsvx
+- License: GPL v3
 
 ---
 
-## ✨ Features at a Glance
+## Features
 
 | Category | Description |
 |---|---|
-| 🛡️ **Scam Shield** | ML-powered scam detection with domain analysis, allowlists, and feedback loop |
-| 🎮 **Gacha System** | 10-tier roll system with crafting, inventory, daily rewards, and shop |
-| 🎫 **Ticket System** | Persistent ticket threads with transcripts, premium perks, and multi-support |
-| 🎁 **Giveaways** | Advanced giveaway system with rerolls, finalization, and role-based hosting |
-| 🔐 **Verification** | Captcha-based member verification with role assignment |
-| 👑 **Premium** | Tiered subscriptions (Monthly/Yearly/Lifetime) with code generation and SellAuth integration |
-| 🕵️ **Presence Tracking** | Server activity stats, top games, now playing, and privacy controls |
-| 🤖 **Gemini AI** | Google Gemini integration for AI-powered responses |
-| 📝 **Audit Logging** | Downloadable audit logs with configurable channels |
-| 🔧 **Reaction Roles** | Customizable dropdown role selection with templates |
-| ⚡ **Automation** | Auto-role for new members, auto-ping channels |
-| 📊 **Message Counting** | Track, leaderboard, transfer, and blacklist message counts |
-| 🌐 **Utilities** | Translation, QR codes, polls, embeds, QR generation, dictionary, and more |
-| 📈 **Crypto/Fiat** | Real-time currency exchange and blockchain transaction checking |
+| Scam Shield | Domain-based scam detection with allowlists, whitelists, and feedback logging |
+| Gacha System | 10-tier rarity rolling with crafting, inventory management, daily rewards, and shop |
+| Ticket System | Persistent support tickets with role-based access, transcripts, and premium perks |
+| Giveaways | Configurable giveaways with reroll, finalization, and role-based hosting permissions |
+| Verification | Captcha-based member verification with configurable role assignment |
+| Premium | Tiered subscriptions (Monthly / Yearly / Lifetime) with code generation and SellAuth integration |
+| Presence Tracking | Server activity statistics, top games, now playing, and per-user privacy opt-out |
+| Gemini AI | Google Gemini integration for answering questions |
+| Audit Logging | Configurable audit log capture with downloadable exports |
+| Reaction Roles | Dropdown-based role selection with custom templates and embeds |
+| Automation | Auto-role assignment on join and configurable auto-ping channels |
+| Message Counting | Per-channel message tracking with leaderboards, transfers, and blacklist |
+| Utilities | Translation, QR codes, polls, custom embeds, dictionary, Wikipedia, and more |
+| Crypto/Fiat | Real-time currency exchange rates and blockchain transaction checking |
 
 ---
 
-## 📋 Command Reference
+## Commands
 
-### 🛡️ Scam Shield & Security
-| Command | Description | Permissions |
+### Scam Shield & Security
+| Command | Description | Required Permissions |
 |---|---|---|
-| `/scam_enable` | Enable Anti-Scam in current channel | Manage Server / Admin |
-| `/scam_disable` | Disable Anti-Scam in current channel | Manage Server / Admin |
-| `/set_log_channel` | Set channel for scam alerts | Manage Server / Admin |
-| `/allowlist_phrase_add` | Add a phrase to the allowlist | Manage Server / Admin |
-| `/allowlist_phrase_remove` | Remove a phrase from the allowlist | Manage Server / Admin |
+| `/scam_enable` | Enable Anti-Scam in current channel | Manage Server / Administrator |
+| `/scam_disable` | Disable Anti-Scam in current channel | Manage Server / Administrator |
+| `/set_log_channel` | Set channel for scam alerts | Manage Server / Administrator |
+| `/allowlist_phrase_add` | Add a phrase to the allowlist | Manage Server / Administrator |
+| `/allowlist_phrase_remove` | Remove a phrase from the allowlist | Manage Server / Administrator |
 | `/allowlist_phrase_list` | View all allowlisted phrases | Anyone |
-| `/whitelisted_phrase` | Manage whitelisted phrases (add/remove/list) | Admin |
-| `/scam_whitelist` | Whitelist users/roles from scam checks | Manage Server / Admin |
+| `/whitelisted_phrase` | Manage whitelisted phrases (add/remove/list) | Administrator |
+| `/scam_whitelist` | Whitelist users or roles from scam checks | Manage Server / Administrator |
 | `/scan_test` | Test the scam scanner against custom text | Anyone |
-| `/debug_safety` | Diagnose security readiness & config | Anyone |
-| `/status` | Show current security & code-helper config | Anyone |
-| `/auditlogsetup` | Toggle audit logging on/off | Admin |
-| `/auditlogchannel` | Set audit log destination channel | Admin |
-| `/auditlogdownload` | Download audit logs (1-7 days) | Admin |
-| `/codehelper_enable` | Enable inline code helper in channel | Manage Server / Admin |
-| `/codehelper_disable` | Disable inline code helper in channel | Manage Server / Admin |
+| `/debug_safety` | Diagnose security readiness and configuration | Anyone |
+| `/status` | Show current security and code-helper configuration | Anyone |
+| `/auditlogsetup` | Toggle audit logging on or off | Administrator |
+| `/auditlogchannel` | Set the channel for audit log entries | Administrator |
+| `/auditlogdownload` | Download server audit logs (1-7 days) | Administrator |
+| `/codehelper_enable` | Enable inline code helper in current channel | Manage Server / Administrator |
+| `/codehelper_disable` | Disable inline code helper in current channel | Manage Server / Administrator |
 | `/lint` | Check Python code for syntax errors | Anyone |
 
-### 🎮 Gacha & Economy
-| Command | Description | Permissions |
+### Gacha & Economy
+| Command | Description | Required Permissions |
 |---|---|---|
-| `/roll` | Roll for items with 10 tiers of rarity | Anyone |
-| `/flex` | Show a member's gacha stats and best rolls | Anyone |
+| `/roll` | Roll for items across 10 rarity tiers | Anyone |
+| `/flex` | Display a member's gacha statistics | Anyone |
 | `/inventory` | View your item inventory | Anyone |
 | `/shop` | Browse the gacha shop | Anyone |
-| `/daily` | Claim your daily chest of potions | Anyone |
+| `/daily` | Claim daily chest of potions | Anyone |
 | `/craft` | Craft items from your inventory | Anyone |
-| *Gacha Stats* | Right-click context menu on any member | Anyone |
+| Gacha Stats (context menu) | Right-click any member to view their gacha stats | Anyone |
 
-### 👑 Premium & Subscription
-| Command | Description | Permissions |
+### Premium & Subscriptions
+| Command | Description | Required Permissions |
 |---|---|---|
 | `/premium` | Check your premium subscription status | Anyone |
-| `/is_premium` | Check your premium status | Anyone |
-| `/redeem` | Redeem a premium code via modal | Anyone |
-| `/login` | Login to your database via email | Anyone |
+| `/is_premium` | Check premium status | Anyone |
+| `/redeem` | Redeem a premium code | Anyone |
+| `/login` | Log in to your database via email | Anyone |
 | `/reset` | Reset your gacha data and credentials | Anyone |
-| `/prem_nsfw` | NSFW content (premium users) | Premium Only |
+| `/prem_nsfw` | NSFW content (premium users only) | Premium |
 | `/nsfw` | NSFW content (rate-limited for free users) | Anyone |
-| `/email` | Send email (dev only) | Dev |
-| `/gen_code` | Generate premium codes (dev only) | Dev |
-| `/remove_premium` | Remove premium from users (dev only) | Dev |
-| `/export_codes` | Export codes to .txt for SellAuth (dev only) | Dev |
-| `/stats` | View Equinox statistics (dev only) | Dev |
+| `/email` | Send an email | Developer |
+| `/gen_code` | Generate premium codes | Developer |
+| `/remove_premium` | Remove premium from a user | Developer |
+| `/export_codes` | Export premium codes to .txt for SellAuth | Developer |
+| `/stats` | View bot statistics | Developer |
 
-### 🎫 Tickets
-| Command | Description | Permissions |
+### Tickets
+| Command | Description | Required Permissions |
 |---|---|---|
-| `/make_ticket` | Create a ticket system with custom panel | Admin |
+| `/make_ticket` | Create a ticket system with a custom panel | Administrator |
 | `/addmember` | Add a member to an open ticket | Ticket Member |
 | `/revmember` | Remove a member from a ticket | Ticket Member |
 
-### 🎁 Giveaways
-| Command | Description | Permissions |
+### Giveaways
+| Command | Description | Required Permissions |
 |---|---|---|
 | `/giveaway_manage` | Reroll or finalize a giveaway by message ID | Host / Host Role |
 | `/giveaway_console` | View all active giveaways in the server | Host / Host Role |
 
-### 🔐 Verification
-| Command | Description | Permissions |
+### Verification
+| Command | Description | Required Permissions |
 |---|---|---|
-| `/make_verify` | Create captcha verification system | Admin / Owner |
-| *Start Verification* | Click the "Start Verification" button | Anyone |
+| `/make_verify` | Create a captcha-based verification system | Administrator / Server Owner |
 
-### 🕵️ Presence & Activity
-| Command | Description | Permissions |
+### Presence & Activity
+| Command | Description | Required Permissions |
 |---|---|---|
-| `/server_member_activity` | View members by status or presence stats | Anyone |
-| `/top_games` | Show top games being played in server | Anyone |
-| `/now_playing` | See what a user is currently playing | Anyone |
+| `/server_member_activity` | View members by presence status or summary statistics | Anyone |
+| `/top_games` | Show the most played games in the server | Anyone |
+| `/now_playing` | View what a user is currently playing or doing | Anyone |
 | `/privacy` | Opt out of presence tracking | Anyone |
 
-### ⚡ Automation
-| Command | Description | Permissions |
+### Automation
+| Command | Description | Required Permissions |
 |---|---|---|
 | `/autoping_whitelist` | Manage auto-ping channels for new members | Manage Messages |
-| `/autorole` | Set/remove/view auto-role for new members | Manage Roles |
+| `/autorole` | Set, remove, or view auto-role configuration | Manage Roles |
 
-### 🔧 Reaction Roles
-| Command | Description | Permissions |
+### Reaction Roles
+| Command | Description | Required Permissions |
 |---|---|---|
 | `/reactionrolesetup` | Create or delete a reaction role template | Manage Roles |
-| `/reactionroleedit` | Add/remove roles from a template | Manage Roles |
-| `/reactionroleembed` | View or edit a template's embed appearance | Manage Roles |
+| `/reactionroleedit` | Add or remove roles from a template | Manage Roles |
+| `/reactionroleembed` | View or edit a template embed's appearance | Manage Roles |
 | `/reactionroledeploy` | Deploy a reaction role template to a channel | Manage Roles |
 
-### 📊 Message Counting
-| Command | Description | Permissions |
+### Message Counting
+| Command | Description | Required Permissions |
 |---|---|---|
 | `/messagecounter` | Toggle message counting in a channel | Manage Messages |
 | `/messagecount` | View a user's message count | Anyone |
@@ -140,82 +131,77 @@
 | `/messagecountdeduct` | Deduct messages from a user | Manage Messages |
 | `/messagecountleaderboard` | Server message count leaderboard | Anyone |
 | `/messagecountgive` | Transfer your message count to another user | Anyone |
-| `/messageblacklist` | Add/remove channels from blacklist | Manage Messages |
+| `/messageblacklist` | Add or remove channels from the message blacklist | Manage Messages |
 
-### 🛠️ Moderation
-| Command | Description | Permissions |
+### Moderation
+| Command | Description | Required Permissions |
 |---|---|---|
-| `/slowmode` | Set channel slowmode | Manage Channels |
-| `/lockdown` | Lock a channel (no messages) | Manage Channels |
-| `/unlockdown` | Unlock a channel | Manage Channels |
-| `/private` | Hide a channel from `@everyone` | Manage Channels |
-| `/unprivate` | Unhide a channel | Manage Channels |
-| `/kick` | Kick a member | Kick Members |
-| `/ban` | Ban a member | Ban Members |
+| `/slowmode` | Set channel slowmode delay | Manage Channels |
+| `/lockdown` | Lock a channel (prevent members from sending messages) | Manage Channels |
+| `/unlockdown` | Unlock a previously locked channel | Manage Channels |
+| `/private` | Hide a channel from @everyone | Manage Channels |
+| `/unprivate` | Restore visibility to a hidden channel | Manage Channels |
+| `/kick` | Kick a member from the server | Kick Members |
+| `/ban` | Ban a member from the server | Ban Members |
 | `/unban` | Unban a user by ID | Ban Members |
-| `/purge` | Clear messages (2-50) with filters | Manage Messages |
+| `/purge` | Clear messages (2-50) with optional filters (bots, embeds, users) | Manage Messages |
 
-### 🌐 Utility
-| Command | Description | Permissions |
+### Utility
+| Command | Description | Required Permissions |
 |---|---|---|
-| `/help` | Interactive help menu with dropdown | Anyone |
-| `/serverinfo` | Detailed server information | Anyone |
-| `/userinfo` | Detailed user information | Anyone |
-| `/roleinfo` | Detailed role information | Anyone |
-| `/avatar` | View a user's avatar in full size | Anyone |
+| `/help` | Interactive help menu | Anyone |
+| `/serverinfo` | Display detailed server information | Anyone |
+| `/userinfo` | Display detailed user information | Anyone |
+| `/roleinfo` | Display detailed role information | Anyone |
+| `/avatar` | View a user's full-size avatar | Anyone |
 | `/ping` | Check bot latency | Anyone |
 | `/invite` | Get bot invite links | Anyone |
 | `/embed` | Create rich embeds with fields | Manage Messages |
 | `/poll` | Start a poll with up to 3 options | Manage Messages |
 | `/clone` | Clone the current channel | Manage Channels |
-| `/qrcode` | Generate a QR code from text/link | Anyone |
+| `/qrcode` | Generate a QR code from text or a URL | Anyone |
 | `/translate` | Translate text to a target language | Anyone |
-| `/def` | Look up a word definition | Anyone |
+| `/def` | Look up the definition of a word | Anyone |
 | `/wiki` | Search Wikipedia | Anyone |
 | `/daysbetween` | Calculate time between two dates | Anyone |
-| `/timedif` | Find time difference between 2 message IDs | Anyone |
-| `/steal` | Steal emojis from another server | Manage Emojis |
-| `/exchange` | Convert fiat ↔ crypto with real-time rates | Anyone |
-| `/check_tx` | Check blockchain transaction details | Anyone |
+| `/timedif` | Calculate the time difference between two message IDs | Anyone |
+| `/steal` | Copy emojis from another server | Manage Emojis |
+| `/exchange` | Convert between fiat and cryptocurrencies using real-time rates | Anyone |
+| `/check_tx` | Check blockchain transaction details across supported chains | Anyone |
 | `/graph` | Plot a mathematical function | Anyone |
-| `/drop` | Start a drop game in chat | Anyone |
-| `/update` | Post Equinox update embed | Dev |
-| *Translate (Context)* | Right-click any message to translate | Anyone |
+| `/drop` | Start a drop game in the current channel | Anyone |
+| `/update` | Post an Equinox update embed | Developer |
+| Translate (context menu) | Right-click any message to translate it | Anyone |
 
-### 🤖 Gemini AI
-| Command | Description | Permissions |
+### Gemini AI
+| Command | Description | Required Permissions |
 |---|---|---|
 | `/ask_gemini` | Ask Google Gemini AI any question | Anyone |
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
-- Python 3.11+
+
+- Python 3.11 or later
 - Discord Bot Token
-- PostgreSQL database (for premium subscriptions)
+- PostgreSQL database (required for premium subscriptions)
 - Google Gemini API Key (optional)
 
 ### Installation
 
-```bash
-# Clone the repository
+```
 git clone https://github.com/PaullyScripter/Equinox.git
 cd Equinox
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Set up environment variables
-cp .env.example .env
 ```
 
 ### Configuration
 
-Edit `.env` with your credentials:
+Create a `.env` file with the following variables:
 
-```env
+```
 DISCORD_TOKEN=your_bot_token
 API_KEY=your_api_key
 ETHERSCAN_API_KEY=your_etherscan_key
@@ -226,76 +212,48 @@ email_sender=your_email@gmail.com
 BACKEND_URL=https://your-backend.onrender.com
 ```
 
-### Run the Bot
+### Running
 
-```bash
+```
 python main.py
 ```
 
-The bot will auto-create all required data files with empty structures on first launch.
+The bot creates all required data files with empty structures on first launch.
 
 ---
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 Equinox/
-├── main.py                 # Bot entry point, views, and core logic
-├── cogs/
-│   ├── automation.py       # Auto-role & auto-ping systems
-│   ├── events.py           # Startup events & code generation
-│   ├── gacha.py            # Gacha rolling, crafting, inventory
-│   ├── giveaway.py         # Giveaway management
-│   ├── giveaway_views.py   # Giveaway UI components
-│   ├── moderation.py       # Slowmode, lockdown, ban/kick
-│   ├── premium.py          # Premium subscriptions & NSFW
-│   ├── presence.py         # Activity tracking & privacy
-│   ├── reaction_roles.py   # Dropdown role selection
-│   ├── security.py         # Scam shield, audit logs, code helper
-│   ├── ticket_views.py     # Ticket UI components
-│   ├── tickets.py          # Ticket system
-│   ├── utility.py          # All utility commands
-│   └── verification.py     # Captcha verification system
-├── assets/                 # Static assets (images, etc.)
-├── scripts/                # Utility scripts
-├── data/                   # Runtime data (gitignored)
-├── .gitignore
-├── LICENSE                 # GPL v3
-└── requirements.txt
+  main.py                  Bot entry point, persistent views, core logic
+  cogs/
+    automation.py          Auto-role and auto-ping systems
+    events.py              Startup events and code replenishment
+    gacha.py               Gacha rolling, crafting, inventory management
+    giveaway.py            Giveaway management
+    giveaway_views.py      Giveaway UI components
+    moderation.py          Slowmode, lockdown, ban, kick, purge
+    premium.py             Premium subscriptions, code generation, NSFW
+    presence.py            Activity tracking, top games, privacy controls
+    reaction_roles.py      Dropdown-based role selection
+    security.py            Scam shield, audit logging, code helper, lint
+    ticket_views.py        Ticket UI components
+    tickets.py             Ticket system
+    utility.py             All utility commands (help, info, translate, etc.)
+    verification.py        Captcha-based member verification
+  assets/                  Static assets
+  scripts/                 Utility scripts
+  data/                    Runtime data (gitignored)
+  .gitignore
+  LICENSE                  GNU General Public License v3
+  requirements.txt
 ```
 
 ---
 
-## 📡 Dashboard & Documentation
+## License
 
-<div align="center">
+GNU General Public License v3.0. See [LICENSE](LICENSE).
 
-[![Dashboard](https://img.shields.io/badge/📊%20Dashboard-equinoxbot.netlify.app-00C7B7?style=for-the-badge)](https://equinoxbot.netlify.app)
-[![Docs](https://img.shields.io/badge/📖%20Documentation-equinoxbot.netlify.app/docs-8B5CF6?style=for-the-badge)](https://equinoxbot.netlify.app/docs)
-
-</div>
-
-- **Dashboard** — `https://equinoxbot.netlify.app`
-- **Documentation** — `https://equinoxbot.netlify.app/docs`
-
----
-
-## 📄 License
-
-This project is licensed under the **GNU General Public License v3.0** — see the [LICENSE](LICENSE) file for details.
-
-```
 Copyright (C) 2025-2026 Equinox Team
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License.
-```
-
----
-
-<div align="center">
-  <sub>Built with ❤️ by PaullyScripter & contributors</sub>
-  <br>
-  <sub>Equinox — Light in the dark, balance in chaos ☀️</sub>
-</div>
