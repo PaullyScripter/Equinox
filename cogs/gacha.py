@@ -14,8 +14,7 @@ import numpy
 
 @app_commands.context_menu(name="Gacha Stats")
 async def gacha_stats(interaction: discord.Interaction, member: discord.Member):
-    import sys as _sys
-    FlexButton = _sys.modules["__main__"].FlexButton
+    from state import FlexButton
     await interaction.response.defer(ephemeral=True)
     msg = await interaction.followup.send("Retrieving your data please wait... <a:loading_symbol:1295113412564615249>")
     with open(f'data/userinventory.json', 'r') as f:
@@ -130,10 +129,7 @@ class GachaCog(commands.Cog):
       discord.app_commands.Choice(name='Trio Charm', value=7),
     ])
     async def roll(self, interaction: discord.Interaction, item: Optional[discord.app_commands.Choice[int]]):
-      import sys as _sys; refresh = _sys.modules['__main__'].refresh
-      import sys as _sys
-      is_premium = _sys.modules["__main__"].is_premium
-      refresh = _sys.modules["__main__"].refresh
+      from state import is_premium, refresh
       await interaction.response.defer()
       refresh()
       with open("data/userinventory.json") as f:
@@ -369,8 +365,7 @@ class GachaCog(commands.Cog):
     @app_commands.command(name="flex", description="Show a member's gacha stats")
     @app_commands.checks.cooldown(1, 2, key=lambda i: (i.user.id))
     async def flex(self, interaction: discord.Interaction, member: Optional[discord.Member]):
-      import sys as _sys
-      FlexButton = _sys.modules["__main__"].FlexButton
+      from state import FlexButton
       await interaction.response.defer(ephemeral=True)
       msg = await interaction.followup.send("Retrieving your data please wait... <a:loading_symbol:1295113412564615249>")
       if member == None:
@@ -601,11 +596,8 @@ class GachaCog(commands.Cog):
     @app_commands.command(name="daily", description="Daily chest of potions")
     @app_commands.checks.cooldown(1, 86400, key=lambda i: (i.user.id))
     async def daily(self, interaction: discord.Interaction):
+      from state import BuyPremium, is_premium, refresh
       refresh()
-      import sys as _sys
-      BuyPremium = _sys.modules["__main__"].BuyPremium
-      is_premium = _sys.modules["__main__"].is_premium
-      refresh = _sys.modules["__main__"].refresh
       active, tier, expires = await is_premium(interaction.user.id)
       if active:
         with open('data/userinventory.json', 'r') as f:

@@ -199,8 +199,7 @@ class UtilityCog(commands.Cog):
     @app_commands.command(name="userinfo", description="Shows information of a user")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
     async def userinfo(self, interaction: discord.Interaction, member: Optional[discord.Member]):
-        import sys as _sys
-        STATUS_PRIVACY_SET = _sys.modules["__main__"].STATUS_PRIVACY_SET
+        from state import STATUS_PRIVACY_SET
         if member is None:
             member = interaction.user
 
@@ -322,9 +321,7 @@ class UtilityCog(commands.Cog):
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
     # @app_commands.describe(firstdate = "The first date dd/mm/yy", seconddate = "The second date dd/mm/yy")
     async def daysbetween(self, interaction: discord.Interaction, firstdate: str, seconddate: str):
-      import sys as _sys
-      _m = _sys.modules["__main__"]
-      DaysBetweenButton = _m.DaysBetweenButton
+      from state import DaysBetweenButton
       await interaction.response.defer()
       days_31 = [1,3,5,7,8,10,12]
       days_30 = [4,6,9,11]
@@ -381,9 +378,7 @@ class UtilityCog(commands.Cog):
 
     @app_commands.command(name="invite", description="Invite Equinox")
     async def invite(self, interaction: discord.Interaction):
-      import sys as _sys
-      _m = _sys.modules["__main__"]
-      myInvite = _m.myInvite
+      from state import myInvite
       emb = discord.Embed(title="You're choosing the best bot for your server! :D",color = 0xffffff)
       await interaction.response.send_message(embed=emb, view=myInvite())
 
@@ -393,11 +388,7 @@ class UtilityCog(commands.Cog):
     @app_commands.command(name="def", description="Find a definition of a word")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
     async def define(self, interaction: discord.Interaction, word: str):
-      import sys as _sys
-      _m = _sys.modules["__main__"]
-      dictionary = _m.dictionary
-      fetch_word_example = _m.fetch_word_example
-      DefineButton = _m.DefineButton
+      from state import dictionary, fetch_word_example, DefineButton
       await interaction.response.defer(ephemeral=True)
       msg2 = await interaction.followup.send("Wait for a few moments... <a:loading_symbol:1295113412564615249>")
       meaning = dictionary.meaning(word)
@@ -426,9 +417,7 @@ class UtilityCog(commands.Cog):
     @app_commands.command(name="translate", description="Translate a text to a destinated language")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
     async def trans(self, interaction: discord.Interaction, args: str, lang: str):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        RawCopyButton = _m.RawCopyButton
+        from state import RawCopyButton
         t = Translator()
         a = t.translate(args, dest=lang)
         embe = discord.Embed(color = 0xffffff)
@@ -450,9 +439,7 @@ class UtilityCog(commands.Cog):
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.checks.bot_has_permissions(manage_channels=True)
     async def clone(self, interaction: discord.Interaction, channel: Optional[discord.TextChannel]):
-      import sys as _sys
-      _m = _sys.modules["__main__"]
-      CloneButton = _m.CloneButton
+      from state import CloneButton
       await interaction.response.defer()
       if channel == None:
         channel = interaction.channel
@@ -466,9 +453,7 @@ class UtilityCog(commands.Cog):
 
     @app_commands.command(name="timedif", description="Find time differences between 2 message id.")
     async def timedif(self, interaction: discord.Interaction, id1: str, id2: str):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        Paginator = _m.Paginator
+        from state import Paginator
         time1 = discord.utils.snowflake_time(int(id1))
         time2 = discord.utils.snowflake_time(int(id2))
         ts_diff = time2 - time1
@@ -503,9 +488,7 @@ class UtilityCog(commands.Cog):
     # @app_commands.describe(emojis="The emojis to steal", names="Optional new names for the emojis, separated by spaces")
     @app_commands.checks.has_permissions(manage_emojis_and_stickers=True)
     async def steal(self, interaction: discord.Interaction, emojis: str, names: str = None):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        client = _m.client
+        from state import client
         await interaction.response.defer()
         guild = interaction.guild
         if not guild:
@@ -566,11 +549,7 @@ class UtilityCog(commands.Cog):
     @app_commands.command(name="help", description="Shows a selectable drow down menu of available commands")
     @app_commands.checks.cooldown(1, 20, key=lambda i: (i.user.id))
     async def help(self, interaction: discord.Interaction):
-      import sys as _sys
-      _m = _sys.modules['__main__']
-      update = _m.update
-      update_note = _m.update_note
-      mySelect = _m.mySelect
+      from state import update, update_note, mySelect
       embed=discord.Embed(title="Equinox Navigator | /equinox", description="```Currently only operable with slash prefix.```", color=0xffffff)
       embed.set_author(name="Equinox' Commands List", icon_url=self.bot.user.avatar)
       embed.add_field(name="My Categories", value="```Search through drop down menu down below.```", inline=False)
@@ -593,6 +572,7 @@ class UtilityCog(commands.Cog):
         to_currency: str
     ):
         await interaction.response.defer()
+        from state import SYMBOL_TO_ID, SUPPORTED_FIAT, CurrencyView
         from_currency = from_currency.lower()
         to_currency = to_currency.lower()
 
@@ -601,41 +581,51 @@ class UtilityCog(commands.Cog):
 
         timestamp = int(datetime.now(timezone.utc).timestamp())
 
-        async with aiohttp.ClientSession() as session:
-            try:
-                if is_from_crypto:
-                    ids = SYMBOL_TO_ID[from_currency]
-                    url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies={to_currency}"
-                    async with session.get(url) as resp:
-                        data = await resp.json()
-                    rate = data[ids][to_currency]
-                    converted = amount * rate
+        cache_key = f"{from_currency}:{to_currency}"
+        cached = getattr(exchange, "_rate_cache", {}).get(cache_key)
+        if cached and (timestamp - cached["ts"] < 60):
+            rate = cached["rate"]
+            converted = amount * rate if is_from_crypto or (not is_from_crypto and not is_to_crypto) else amount / rate
+        else:
+            async with aiohttp.ClientSession() as session:
+                try:
+                    if is_from_crypto:
+                        ids = SYMBOL_TO_ID[from_currency]
+                        url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies={to_currency}"
+                        async with session.get(url) as resp:
+                            data = await resp.json()
+                        rate = data[ids][to_currency]
+                        converted = amount * rate
 
-                elif is_to_crypto:
-                    ids = SYMBOL_TO_ID[to_currency]
-                    url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies={from_currency}"
-                    async with session.get(url) as resp:
-                        data = await resp.json()
-                    rate = data[ids][from_currency]
-                    converted = amount / rate
+                    elif is_to_crypto:
+                        ids = SYMBOL_TO_ID[to_currency]
+                        url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies={from_currency}"
+                        async with session.get(url) as resp:
+                            data = await resp.json()
+                        rate = data[ids][from_currency]
+                        converted = amount / rate
 
-                elif from_currency in SUPPORTED_FIAT and to_currency in SUPPORTED_FIAT:
-                    url = f"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies={from_currency},{to_currency}"
-                    async with session.get(url) as resp:
-                        data = await resp.json()
-                    btc_to_from = data["bitcoin"][from_currency]
-                    btc_to_to = data["bitcoin"][to_currency]
-                    rate = btc_to_to / btc_to_from
-                    converted = amount * rate
-                else:
-                    embed = discord.Embed(title="Supported Currencies", color=discord.Color.red())
-                    embed.add_field(name="Fiat", value=", ".join(sorted(SUPPORTED_FIAT)), inline=False)
-                    embed.add_field(name="Crypto", value=", ".join(sorted(SYMBOL_TO_ID.keys())), inline=False)
-                    await interaction.followup.send("One or both currencies are invalid.", embed=embed, ephemeral=True)
+                    elif from_currency in SUPPORTED_FIAT and to_currency in SUPPORTED_FIAT:
+                        url = f"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies={from_currency},{to_currency}"
+                        async with session.get(url) as resp:
+                            data = await resp.json()
+                        btc_to_from = data["bitcoin"][from_currency]
+                        btc_to_to = data["bitcoin"][to_currency]
+                        rate = btc_to_to / btc_to_from
+                        converted = amount * rate
+                    else:
+                        embed = discord.Embed(title="Supported Currencies", color=discord.Color.red())
+                        embed.add_field(name="Fiat", value=", ".join(sorted(SUPPORTED_FIAT)), inline=False)
+                        embed.add_field(name="Crypto", value=", ".join(sorted(SYMBOL_TO_ID.keys())), inline=False)
+                        await interaction.followup.send("One or both currencies are invalid.", embed=embed, ephemeral=True)
+                        return
+
+                    if not hasattr(exchange, "_rate_cache"):
+                        exchange._rate_cache = {}
+                    exchange._rate_cache[cache_key] = {"rate": rate, "ts": timestamp}
+                except Exception:
+                    await interaction.followup.send("Failed to fetch exchange rate. Try again later.", ephemeral=True)
                     return
-            except Exception:
-                await interaction.followup.send("Failed to fetch exchange rate. Try again later.", ephemeral=True)
-                return
 
         embed = discord.Embed(title="💱 Currency Exchange", color=0xffffff)
         embed.add_field(name="From", value=f"`{amount}` `{from_currency.upper()}`", inline=True)
@@ -659,12 +649,7 @@ class UtilityCog(commands.Cog):
     @app_commands.command(name="check_tx", description="Check transaction details across chains")
     # @app_commands.describe(txid="Transaction ID/hash",chain="Blockchain to check (btc, ltc, doge, eth)",min_confirmations="Notify when this confirmation count is reached (max 11)",))
     async def check_tx(self, interaction: discord.Interaction, txid: str, chain: str, min_confirmations: int = None):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        fetch_tx_data = _m.fetch_tx_data
-        parse_tx_data = _m.parse_tx_data
-        pending_alerts = _m.pending_alerts
-        SUPPORTED_CHAINS = _m.SUPPORTED_CHAINS
+        from state import fetch_tx_data, parse_tx_data, pending_alerts, SUPPORTED_CHAINS
         await interaction.response.defer()
         chain = chain.lower()
 
@@ -701,10 +686,7 @@ class UtilityCog(commands.Cog):
         app_commands.Choice(name="Disable", value="disable")
     ])
     async def messagecounter(self, interaction: discord.Interaction, option: app_commands.Choice[str]):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        load_server_data = _m.load_server_data
-        save_server_data = _m.save_server_data
+        from state import load_server_data, save_server_data
 
         guild_id = str(interaction.guild.id)
         data = load_server_data(guild_id) or {
@@ -730,10 +712,7 @@ class UtilityCog(commands.Cog):
     @app_commands.command(name="messagecount")
     # @app_commands.describe(user="User to check message count for")
     async def messagecount(self, interaction: discord.Interaction, user: discord.User = None):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        load_server_data = _m.load_server_data
-        save_server_data = _m.save_server_data
+        from state import load_server_data, save_server_data
         user = user or interaction.user
         guild_id = str(interaction.guild.id)
         data = load_server_data(guild_id)
@@ -772,10 +751,7 @@ class UtilityCog(commands.Cog):
 
     @app_commands.command(name="messageblacklistview")
     async def messageblacklistview(self, interaction: discord.Interaction):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        load_server_data = _m.load_server_data
-        save_server_data = _m.save_server_data
+        from state import load_server_data, save_server_data
 
         guild_id = str(interaction.guild.id)
         data = load_server_data(guild_id)
@@ -805,11 +781,7 @@ class UtilityCog(commands.Cog):
     # @app_commands.describe(user="User to deduct message count from", amount="Amount to deduct")
     @app_commands.checks.has_permissions(administrator=True)
     async def messagecountdeduct(self, interaction: discord.Interaction, user: discord.User, amount: int):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        load_server_data = _m.load_server_data
-        save_server_data = _m.save_server_data
-        PaginationView = _m.PaginationView
+        from state import load_server_data, save_server_data, PaginationView
 
         guild_id = str(interaction.guild.id)
         data = load_server_data(guild_id)
@@ -831,11 +803,7 @@ class UtilityCog(commands.Cog):
 
     @app_commands.command(name="messagecountleaderboard")
     async def messagecountleaderboard(self, interaction: discord.Interaction):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        load_server_data = _m.load_server_data
-        save_server_data = _m.save_server_data
-        PaginationView = _m.PaginationView
+        from state import load_server_data, save_server_data, PaginationView
         guild_id = str(interaction.guild.id)
         data = load_server_data(guild_id)
         if not data:
@@ -892,10 +860,7 @@ class UtilityCog(commands.Cog):
     @app_commands.command(name="messagecountgive", description="Transfer your message count to another user.")
     # @app_commands.describe(to_user="User to give messages to", amount="Amount to transfer")
     async def messagecountgive(self, interaction: discord.Interaction, to_user: discord.User, amount: int):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        load_server_data = _m.load_server_data
-        save_server_data = _m.save_server_data
+        from state import load_server_data, save_server_data
         from_user = interaction.user
 
         if from_user.id == to_user.id:
@@ -955,10 +920,7 @@ class UtilityCog(commands.Cog):
         app_commands.Choice(name="Remove", value="remove")
     ])
     async def messageblacklist(self, interaction: discord.Interaction, action: app_commands.Choice[str], channel: discord.TextChannel):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        load_server_data = _m.load_server_data
-        save_server_data = _m.save_server_data
+        from state import load_server_data, save_server_data
 
         guild_id = str(interaction.guild.id)
         data = load_server_data(guild_id)
@@ -990,14 +952,7 @@ class UtilityCog(commands.Cog):
     @app_commands.command(name="ask_gemini", description="Ask Gemini AI any question")
     @app_commands.checks.has_permissions(administrator=True)
     async def ask_gemini_command(self, interaction: discord.Interaction):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        BuyPremium = _m.BuyPremium
-        load_gemini_servers = _m.load_gemini_servers
-        RemoveGeminiView = _m.RemoveGeminiView
-        save_gemini_servers = _m.save_gemini_servers
-        PromptButtonView = _m.PromptButtonView
-        is_premium = _m.is_premium
+        from state import BuyPremium, load_gemini_servers, RemoveGeminiView, save_gemini_servers, PromptButtonView, is_premium
         await interaction.response.defer(ephemeral=True)
 
         guild = interaction.guild
@@ -1051,10 +1006,7 @@ class UtilityCog(commands.Cog):
     @app_commands.command(name="drop", description="Start a drop game.")
     # @app_commands.describe(prize="The prize for the drop", reaction="Add participation reaction (🤚)?")
     async def drop(self, interaction: discord.Interaction, prize: str, reaction: bool = False):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        DropView = _m.DropView
-        DeployView = _m.DeployView
+        from state import DropView, DeployView
         await interaction.response.defer()
 
         async def deploy_callback(deploy_interaction: discord.Interaction):
@@ -1103,13 +1055,7 @@ class UtilityCog(commands.Cog):
 
     @app_commands.command(name="graph", description="Create a graph with a function")
     async def graph_command(self, interaction: discord.Interaction, function: str):
-      import sys as _sys
-      _m = _sys.modules["__main__"]
-      user_graph_data = _m.user_graph_data
-      random_color = _m.random_color
-      generate_graph = _m.generate_graph
-      GraphView = _m.GraphView
-      is_premium = _m.is_premium
+      from state import user_graph_data, random_color, generate_graph, GraphView, is_premium
       active, tier, expires = await is_premium(interaction.user.id)
       if active:
         await interaction.response.defer()
@@ -1143,10 +1089,7 @@ class UtilityCog(commands.Cog):
 
     @app_commands.command(name="update", description="Setup a Equinox' updates (Devs only, users use /help)")
     async def update_setup(self, interaction: discord.Interaction):
-      import sys as _sys
-      _m = _sys.modules["__main__"]
-      devs = _m.devs
-      UpdateButton = _m.UpdateButton
+      from state import devs, UpdateButton
       if interaction.user.id in devs:
         embed = discord.Embed(title=f"Equinox's Updates Checker", description="```Please click the button if you wish to check Equinox' update(s)```", color=0xffffff)
         await interaction.response.send_message(embed=embed, view=UpdateButton())
@@ -1161,8 +1104,7 @@ class UtilityCog(commands.Cog):
 
     @app_commands.command(name="wiki", description="Search anything from wikipedia")
     async def wikipedia_query(self, interaction: discord.Interaction, search: str):
-      import sys as _sys
-      WikipediaButton = _sys.modules["__main__"].WikipediaButton
+      from state import WikipediaButton
       await interaction.response.defer()
       msg = await interaction.followup.send("Please wait... <a:loading_symbol:1295113412564615249>")
       output = wikipedia.search(search)

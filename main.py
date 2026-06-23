@@ -2,6 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from discord.ext.commands import Bot
+import state
 import os
 import asyncio
 from datetime import datetime, date, timezone, timedelta
@@ -40,13 +41,10 @@ import numpy
 import io
 from captcha.image import ImageCaptcha                             
 from discord.ext import tasks
-from typing import Literal
 from discord.utils import format_dt
 import os, re, json, ast, time, uuid, string
 from collections import deque, defaultdict
-from typing import Dict, Any, List, Tuple
-from typing import Optional, Literal
-import matplotlib.pyplot as plt
+from typing import Dict, Any, List, Tuple, Optional, Literal
 from io import BytesIO
 import httpx
 import asyncpg
@@ -208,12 +206,7 @@ def refresh():
     yearly_data = read_json("yearlycode")
     client.yearly_codes = yearly_data.get("yearlycodes", [])
 
-                          
-    try:
-        lifetime_data = read_json("lifetimecode")
-    except FileNotFoundError:
-        lifetime_data = {"lifetimecodes": []}
-        write_json(lifetime_data, "lifetimecode")
+    lifetime_data = read_json("lifetimecode")
     client.lifetime_codes = lifetime_data.get("lifetimecodes", [])
 
                                                                                   
@@ -3927,6 +3920,130 @@ _EMPTY_STRUCTURES = {
 for _fname, _default in _EMPTY_STRUCTURES.items():
     if not os.path.exists(f"data/{_fname}.json"):
         write_json(_default, _fname)
+
+# ── Populate shared state module ──
+state.client = client
+state.PREFIX = PREFIX
+state.devs = devs
+state.IGNORED_USER_IDS = IGNORED_USER_IDS
+state.SUB_FILES = SUB_FILES
+state.PRIVACY_SET = PRIVACY_SET
+state.STATUS_PRIVACY_SET = STATUS_PRIVACY_SET
+state.SUPPORTED_FIAT = SUPPORTED_FIAT
+state.SYMBOL_TO_ID = SYMBOL_TO_ID
+state.SUPPORTED_CHAINS = SUPPORTED_CHAINS
+state.COLOR_OK = COLOR_OK
+state.COLOR_WARN = COLOR_WARN
+state.COLOR_BAD = COLOR_BAD
+state.COLOR_INFO = COLOR_INFO
+state.CODEBLOCK_CLOSED_RE = CODEBLOCK_CLOSED_RE
+state.CODEBLOCK_UNTERMINATED_RE = CODEBLOCK_UNTERMINATED_RE
+state.DURATION_RE = DURATION_RE
+state.pending_alerts = pending_alerts
+state.user_graph_data = user_graph_data
+state.dictionary = dictionary
+state.char1 = char1
+
+# View / UI classes
+state.FlexButton = FlexButton
+state.BuyPremium = BuyPremium
+state.DaysBetweenButton = DaysBetweenButton
+state.myInvite = myInvite
+state.Mymodal = Mymodal
+state.AuthButton = AuthButton
+state.LoginModal = LoginModal
+state.ResetButton = ResetButton
+state.NumbersButton = NumbersButton
+state.VerifyButton = VerifyButton
+state.DeleteVerifySystem = DeleteVerifySystem
+state.EmailCheck = EmailCheck
+state.EmailCode = EmailCode
+state.UnbanButton = UnbanButton
+state.DefineButton = DefineButton
+state.RawCopyButton = RawCopyButton
+state.WikipediaButton = WikipediaButton
+state.CloneButton = CloneButton
+state.rrSelectGames = rrSelectGames
+state.rrSelectGender = rrSelectGender
+state.rrSelectPing = rrSelectPing
+state.rrSelectServer = rrSelectServer
+state.Paginator = Paginator
+state.mySelect = mySelect
+state.CurrencyView = CurrencyView
+state.PaginationView = PaginationView
+state.PromptModal = PromptModal
+state.PromptButtonView = PromptButtonView
+state.GeminiView = GeminiView
+state.RemoveGeminiView = RemoveGeminiView
+state.DeployView = DeployView
+state.DropView = DropView
+state.GraphView = GraphView
+state.FunctionInputModal = FunctionInputModal
+state.DeleteFunctionModal = DeleteFunctionModal
+state.ZoomModal = ZoomModal
+state.UpdateButton = UpdateButton
+state.ScamFeedbackView = ScamFeedbackView
+state.YoungestView = YoungestView
+state.MemberStatsView = MemberStatsView
+state.PresencePaginator = PresencePaginator
+state.ReactionRoleView = ReactionRoleView
+state.BuyPremium2 = BuyPremium2
+
+# Functions
+state.read_json = read_json
+state.write_json = write_json
+state.refresh = refresh
+state.is_premium = is_premium
+state.format_expires = format_expires
+state.load_json = load_json
+state.save_json = save_json
+state.load_stats = load_stats
+state.save_stats = save_stats
+state._log_command = _log_command
+state.load_autoping_channels = load_autoping_channels
+state.save_autoping_channels = save_autoping_channels
+state.load_autorole = load_autorole
+state.save_autorole = save_autorole
+state.remove_autorole = remove_autorole
+state.load_privacy_settings = load_privacy_settings
+state.save_privacy_settings = save_privacy_settings
+state.reload_privacy_sets = reload_privacy_sets
+state.load_server_data = load_server_data
+state.save_server_data = save_server_data
+state.load_gemini_servers = load_gemini_servers
+state.save_gemini_servers = save_gemini_servers
+state.load_actions = load_actions
+state.save_actions = save_actions
+state.append_audit_log = append_audit_log
+state.read_audit_log = read_audit_log
+state.load_audit_config = load_audit_config
+state.save_audit_config = save_audit_config
+state.get_guild_cfg = get_guild_cfg
+state.update_guild_cfg = update_guild_cfg
+state.embed_basic = embed_basic
+state.admin_or_manage_guild = admin_or_manage_guild
+state.normalize_phrase = normalize_phrase
+state.extract_domains = extract_domains
+state.scan_message_for_scams = scan_message_for_scams
+state.try_python_syntax_check = try_python_syntax_check
+state.parse_duration_to_timedelta = parse_duration_to_timedelta
+state.fmt_discord_time = fmt_discord_time
+state._chunk_lines = _chunk_lines
+state.build_overview_embed = build_overview_embed
+state.is_scam_whitelisted = is_scam_whitelisted
+state.fetch_tx_data = fetch_tx_data
+state.parse_tx_data = parse_tx_data
+state.fetch_word_example = fetch_word_example
+state.generate_graph = generate_graph
+state.replenish_codes = replenish_codes
+state._load_codes_for_tier = _load_codes_for_tier
+state._as_txt_file = _as_txt_file
+state.remove_subscription = remove_subscription
+state.init_db_pool = init_db_pool
+state.load_data = load_data
+state.update = update
+state.random_color = random_color
+state.update_note = update_note
 
 client.run(os.getenv("DISCORD_TOKEN"))
   

@@ -5,6 +5,7 @@ Discord bot built with discord.py. Provides moderation, security, utility, gacha
 
 - Dashboard: https://equinoxbot.netlify.app
 - Documentation: https://equinoxbot.netlify.app/docs
+- Invite: [Invite Equinox](https://discord.com/oauth2/authorize?client_id=1237992032715280385&permissions=8&scope=bot) (Admin perms) | [Limited perms](https://discord.com/oauth2/authorize?client_id=1237992032715280385&permissions=268494870&scope=bot)
 - Support Server: https://discord.gg/Cu8JR7Vsvx
 - License: GPL v3
 

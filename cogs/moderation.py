@@ -101,8 +101,7 @@ class ModerationCog(commands.Cog):
     @app_commands.checks.bot_has_permissions(ban_members=True)
     async def ban(self, interaction: discord.Interaction, member: discord.Member, reason: Optional[str]):
       bot_user = interaction.guild.get_member(self.bot.user.id)
-      import sys as _sys
-      UnbanButton = _sys.modules["__main__"].UnbanButton
+      from state import UnbanButton
       clienttop_role = bot_user.top_role
       if interaction.user.id == interaction.guild.owner_id:
         await interaction.guild.ban(user=member, reason=reason)

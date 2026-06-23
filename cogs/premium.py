@@ -16,8 +16,7 @@ class PremiumCog(commands.Cog):
 
     @app_commands.command(name="redeem", description="Redeem a premium code")
     async def redeem(self, interaction: discord.Interaction):
-        import sys as _sys
-        Mymodal = _sys.modules["__main__"].Mymodal
+        from state import Mymodal
         await interaction.response.send_modal(Mymodal())
 
 
@@ -25,8 +24,7 @@ class PremiumCog(commands.Cog):
     @app_commands.command(name="login", description="Login to your database using email")
     @app_commands.checks.cooldown(1, 30, key=lambda i: (i.user.id))
     async def login(self, interaction: discord.Interaction):
-      import sys as _sys
-      LoginModal = _sys.modules["__main__"].LoginModal
+      from state import LoginModal
       with open("data/userinventory.json") as f:
         users = json.load(f)
       userid_list = []
@@ -53,8 +51,7 @@ class PremiumCog(commands.Cog):
     @app_commands.command(name="reset", description="Resets your databases")
     @app_commands.checks.cooldown(1, 60, key=lambda i: (i.user.id))
     async def reset(self, interaction: discord.Interaction):
-        import sys as _sys
-        ResetButton = _sys.modules["__main__"].ResetButton
+        from state import ResetButton
         embed=discord.Embed(title="Are you sure with resetting all your data?\nThis includes your rolls, items, credentials, and stats.\nIgnore this to cancel", color=0xffffff)
         view = ResetButton(interaction.user.id)
         await interaction.response.defer()
@@ -65,9 +62,7 @@ class PremiumCog(commands.Cog):
     @app_commands.command(name="premium", description="Check your premium status")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
     async def premium(self, interaction: discord.Interaction, member: Optional[discord.Member] = None):
-        import sys as _sys
-        is_premium = _sys.modules["__main__"].is_premium
-        format_expires = _sys.modules["__main__"].format_expires
+        from state import is_premium, format_expires
         if member is None:
             member = interaction.user
 
@@ -95,8 +90,7 @@ class PremiumCog(commands.Cog):
     @app_commands.command(name="is_premium", description="Check your premium status")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
     async def i_spremium(self, interaction: discord.Interaction, member: Optional[discord.Member] = None):
-        import sys as _sys
-        is_premium = _sys.modules["__main__"].is_premium
+        from state import is_premium
         target = interaction.user
         active, tier, expires = await is_premium(target.id)
 
@@ -113,10 +107,7 @@ class PremiumCog(commands.Cog):
 
     @app_commands.command(name="prem_nsfw", description="Displays various catergories of nsfw contents (for premium users)")
     async def prem_nsfw(self, interaction: discord.Interaction, catergory: Optional[str]):
-      import sys as _sys
-      refresh = _sys.modules["__main__"].refresh
-      BuyPremium = _sys.modules["__main__"].BuyPremium
-      is_premium = _sys.modules["__main__"].is_premium
+      from state import refresh, BuyPremium, is_premium
       refresh()
       active, tier, expires = await is_premium(interaction.user.id)
       if active:
@@ -156,9 +147,7 @@ class PremiumCog(commands.Cog):
     @app_commands.command(name="nsfw", description="Displays various catergories of nsfw contents (for normal users)")
     @app_commands.checks.cooldown(10, 3600, key=lambda i: (i.user.id))
     async def nsfw(self, interaction: discord.Interaction, catergory: Optional[str]):
-      import sys as _sys
-      refresh = _sys.modules["__main__"].refresh
-      is_premium = _sys.modules["__main__"].is_premium
+      from state import refresh, is_premium
       refresh()
       active, tier, expires = await is_premium(interaction.user.id)
       if interaction.channel.is_nsfw():
@@ -202,9 +191,7 @@ class PremiumCog(commands.Cog):
 
     @app_commands.command(name="email", description="Sends email (Devs only)")
     async def email(self, interaction: discord.Interaction, email: str, code: str):
-      import sys as _sys
-      devs = _sys.modules["__main__"].devs
-      EmailCheck = _sys.modules["__main__"].EmailCheck
+      from state import devs, EmailCheck
       codetype = None
       if code in self.bot.monthly_codes:
         codetype = "monthly"
@@ -230,9 +217,7 @@ class PremiumCog(commands.Cog):
         tier: str,
         amount: Optional[int] = 1
     ):
-        import sys as _sys
-        devs = _sys.modules["__main__"].devs
-        replenish_codes = _sys.modules["__main__"].replenish_codes
+        from state import devs, replenish_codes
         if interaction.user.id not in devs:
             return await interaction.response.send_message("Devs only.", ephemeral=True)
 
@@ -284,11 +269,7 @@ class PremiumCog(commands.Cog):
 
     @app_commands.command(name="remove_premium", description="Remove premium from users (Devs only)")
     async def remove_premium(self, interaction: discord.Interaction, member: discord.Member):
-        import sys as _sys
-        devs = _sys.modules["__main__"].devs
-        SUB_FILES = _sys.modules["__main__"].SUB_FILES
-        load_json = _sys.modules["__main__"].load_json
-        remove_subscription = _sys.modules["__main__"].remove_subscription
+        from state import devs, SUB_FILES, load_json, remove_subscription
         if interaction.user.id not in devs:
             return await interaction.response.send_message("Devs only.", ephemeral=True)
 
@@ -315,10 +296,7 @@ class PremiumCog(commands.Cog):
 
     @app_commands.command(name="export_codes", description="Export premium codes to .txt for SellAuth (Devs only)")
     async def export_codes(self, interaction: discord.Interaction, tier: str):
-        import sys as _sys
-        devs = _sys.modules["__main__"].devs
-        _load_codes_for_tier = _sys.modules["__main__"]._load_codes_for_tier
-        _as_txt_file = _sys.modules["__main__"]._as_txt_file
+        from state import devs, _load_codes_for_tier, _as_txt_file
         if interaction.user.id not in devs:
             return await interaction.response.send_message("Devs only.", ephemeral=True)
 
@@ -355,10 +333,7 @@ class PremiumCog(commands.Cog):
 
     @app_commands.command(name="stats", description="Shows Equinox' stats (Devs only)")
     async def stats(self, interaction: discord.Interaction):
-        import sys as _sys
-        devs = _sys.modules["__main__"].devs
-        load_stats = _sys.modules["__main__"].load_stats
-        IGNORED_USER_IDS = _sys.modules["__main__"].IGNORED_USER_IDS
+        from state import devs, load_stats, IGNORED_USER_IDS
         if interaction.user.id not in devs:
             await interaction.response.defer(ephemeral=True)
             await interaction.followup.send("Devs only.")

@@ -25,9 +25,7 @@ class AutomationCog(commands.Cog):
         action: app_commands.Choice[str],
         channel: discord.TextChannel = None
     ):
-        import sys as _sys
-        load_autoping_channels = _sys.modules["__main__"].load_autoping_channels
-        save_autoping_channels = _sys.modules["__main__"].save_autoping_channels
+        from state import load_autoping_channels, save_autoping_channels
         guild_id = interaction.guild.id
         current_channels = load_autoping_channels(guild_id)
 
@@ -66,10 +64,7 @@ class AutomationCog(commands.Cog):
     @app_commands.checks.has_permissions(manage_roles=True)
     async def autorole(self, interaction: discord.Interaction, action: app_commands.Choice[str], role: discord.Role = None):
         guild = interaction.guild
-        import sys as _sys
-        load_autorole = _sys.modules["__main__"].load_autorole
-        remove_autorole = _sys.modules["__main__"].remove_autorole
-        save_autorole = _sys.modules["__main__"].save_autorole
+        from state import load_autorole, remove_autorole, save_autorole
         autorole_id = load_autorole(guild.id)
 
         if action.value == "add":

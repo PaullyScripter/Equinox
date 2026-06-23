@@ -29,12 +29,7 @@ class ReactionRolesCog(commands.Cog):
     @app_commands.command(name="rrgame", description="Make a selection role (Dev only)")
     async def rr(self, interaction: discord.Interaction):
       if interaction.user.id in devs:
-        import sys as _sys
-        devs = _sys.modules["__main__"].devs
-        rrSelectGames = _sys.modules["__main__"].rrSelectGames
-        rrSelectGender = _sys.modules["__main__"].rrSelectGender
-        rrSelectPing = _sys.modules["__main__"].rrSelectPing
-        rrSelectServer = _sys.modules["__main__"].rrSelectServer
+        from state import devs, rrSelectGames, rrSelectGender, rrSelectPing, rrSelectServer
         games_embed=discord.Embed(title="・What game(s) do you play? ⚝", color=0x2c2d35)
         games_embed.set_image(url="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeTE2MnY1bW44anhmZ3VxbjYzc2Zjb3B1cDlzcWVrbHR0aXRyczd2OCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/IBYvXiE7xtYHB4DHS1/giphy.gif")
         games_view = rrSelectGames()
@@ -70,9 +65,7 @@ class ReactionRolesCog(commands.Cog):
         action: Literal["Add", "Remove"]                                     
     ):
 
-        import sys as _sys
-        BuyPremium = _sys.modules["__main__"].BuyPremium
-        is_premium = _sys.modules["__main__"].is_premium
+        from state import BuyPremium, is_premium
         data = load_data()
         gid = str(interaction.guild_id)
         if gid not in data:
@@ -217,8 +210,7 @@ class ReactionRolesCog(commands.Cog):
         name: str,
         channel: discord.TextChannel = None
     ):
-        import sys as _sys
-        ReactionRoleView = _sys.modules["__main__"].ReactionRoleView
+        from state import ReactionRoleView
         if not interaction.user.guild_permissions.manage_roles:
             await interaction.response.send_message("You lack permission to manage roles.", ephemeral=True)
             return
