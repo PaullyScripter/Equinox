@@ -3226,7 +3226,12 @@ def save_audit_config(data):
 
 def append_audit_log(guild_id: int, entry: str):
     os.makedirs("audit_logs", exist_ok=True)
-    with open(f"audit_logs/{guild_id}.txt", "a", encoding="utf-8") as f:
+    path = f"audit_logs/{guild_id}.txt"
+    if os.path.exists(path) and os.path.getsize(path) > 20 * 1024 * 1024:
+        base, ext = os.path.splitext(path)
+        import shutil
+        shutil.move(path, f"{base}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}{ext}")
+    with open(path, "a", encoding="utf-8") as f:
         f.write(entry + "\n")
 
 def read_audit_log(guild_id: int):

@@ -32,5 +32,8 @@ data_assets/
 handoff.md
 opencode.json
 
+# Audit logs (sensitive data)
+audit_logs/
+
 # Backups
 backups/

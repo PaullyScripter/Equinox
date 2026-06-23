@@ -2,6 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from discord.ui import View, Button, Modal, TextInput, Select
+from discord.utils import format_dt
 from typing import Optional
 from datetime import datetime, timezone, timedelta
 import json, random, asyncio, re, math, io, os
@@ -280,6 +281,8 @@ class EventsCog(commands.Cog):
     async def on_audit_log_entry_create(self, entry: discord.AuditLogEntry):
         from state import load_audit_config, append_audit_log
         guild = entry.guild
+        if guild is None:
+            return
         config = load_audit_config()
         gid = str(guild.id)
 
@@ -287,48 +290,214 @@ class EventsCog(commands.Cog):
             return
 
         user = entry.user
+        user_name = str(user) if user else "System"
+        user_id = str(user.id) if user else "N/A"
+        action = entry.action
         target = entry.target
-        reason = entry.reason or "No reason provided"
-        action = entry.action.name
+        target_display = self._audit_target_str(target)
+        reason = entry.reason
         timestamp = datetime.now(timezone.utc)
 
-        if isinstance(target, discord.User):
-            target_display = f"{target.name}#{target.discriminator}"
-        elif isinstance(target, discord.TextChannel):
-            target_display = f"#{target.name}"
-        elif isinstance(target, discord.Member):
-            target_display = str(target)
-        elif hasattr(target, 'name'):
-            target_display = str(target.name)
-        else:
-            target_display = f"Object ID: {getattr(target, 'id', 'N/A')}"
-
-        log_entry = f"{timestamp.isoformat()} | Action: {action} | By: {user} {user.id} | On: {target_display} | Reason: {reason}"
+        log_entry = (
+            f"{timestamp.isoformat()} | Action: {action.name}"
+            f" | By: {user_name} {user_id}"
+            f" | On: {target_display}"
+            f" | Reason: {reason or 'None'}"
+        )
         append_audit_log(guild.id, log_entry)
 
         channel_id = config[gid].get("channel")
-        if channel_id:
-            channel = guild.get_channel(channel_id)
-            if channel:
-                embed = discord.Embed(
-                    title="Audit Log Entry",
-                    color=0xffffff,
-                    timestamp=timestamp
+        if not channel_id:
+            return
+        channel = guild.get_channel(channel_id)
+        if not channel:
+            return
+
+        embed = self._build_audit_embed(entry, timestamp)
+        await channel.send(embed=embed)
+
+    # ------------------------------------------------------------------
+    # Audit embed helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _audit_target_str(target):
+        if target is None:
+            return "N/A"
+        if isinstance(target, (discord.User, discord.Member)):
+            return f"{target} ({target.id})"
+        if isinstance(target, discord.TextChannel):
+            return f"#{target.name} ({target.id})"
+        if isinstance(target, discord.VoiceChannel):
+            return f"🔊 {target.name} ({target.id})"
+        if isinstance(target, discord.CategoryChannel):
+            return f"📁 {target.name} ({target.id})"
+        if isinstance(target, discord.Role):
+            return f"@{target.name} ({target.id})"
+        if isinstance(target, discord.Invite):
+            return f"discord.gg/{target.code}"
+        if isinstance(target, discord.Webhook):
+            return f"{target.name} ({target.id})"
+        if isinstance(target, discord.Emoji):
+            return f"{target.name} ({target.id})"
+        if isinstance(target, discord.Sticker):
+            return f"{target.name} ({target.id})"
+        if isinstance(target, discord.Guild):
+            return target.name
+        if isinstance(target, discord.ScheduledEvent):
+            return f"{target.name} ({target.id})"
+        if isinstance(target, discord.Integration):
+            return f"{target.type}:{target.name} ({target.id})"
+        if isinstance(target, discord.AutoModRule):
+            return f"{target.name} ({target.id})"
+        name = getattr(target, "name", None)
+        tid = getattr(target, "id", "N/A")
+        if name:
+            return f"{name} ({tid})"
+        return f"Object ID: {tid}"
+
+    @staticmethod
+    def _fmt_val(v):
+        if v is None:
+            return "—"
+        if isinstance(v, discord.Permissions):
+            enabled = [p.replace("_", " ").title() for p, val in v if val]
+            return ", ".join(enabled) if enabled else "None"
+        if isinstance(v, discord.Colour):
+            return str(v)
+        if isinstance(v, discord.Asset):
+            return str(v)
+        if isinstance(v, discord.Object):
+            return f"{getattr(v, 'name', '?')} ({v.id})" if hasattr(v, 'id') else str(v)
+        if isinstance(v, discord.Role):
+            return f"@{v.name} ({v.id})"
+        if isinstance(v, (discord.User, discord.Member)):
+            return f"{v} ({v.id})"
+        if isinstance(v, (discord.TextChannel, discord.VoiceChannel, discord.CategoryChannel,
+                         discord.StageChannel, discord.ForumChannel)):
+            return f"#{v.name} ({v.id})"
+        if isinstance(v, discord.Invite):
+            return f"discord.gg/{v.code}"
+        if isinstance(v, discord.PartialEmoji):
+            return str(v)
+        if isinstance(v, discord.abc.GuildChannel):
+            return f"#{v.name} ({v.id})"
+        if isinstance(v, datetime):
+            return format_dt(v, style="F")
+        if isinstance(v, (list, tuple)):
+            parts = [str(x) for x in v[:20]]
+            text = ", ".join(parts)
+            if len(v) > 20:
+                text += f" … and {len(v) - 20} more"
+            return text or "—"
+        if isinstance(v, bool):
+            return "Yes" if v else "No"
+        if hasattr(v, "name"):
+            return str(v.name)
+        return str(v)
+
+    def _build_audit_embed(self, entry: discord.AuditLogEntry, timestamp: datetime):
+        user = entry.user
+        action = entry.action
+        target = entry.target
+        action_name = action.name.replace("_", " ").title()
+        reason = entry.reason
+
+        embed = discord.Embed(title="Audit Log Entry", color=0xffffff, timestamp=timestamp)
+
+        if user:
+            embed.set_author(name=str(user), icon_url=user.display_avatar.url)
+            embed.add_field(name="Executor", value=f"{user} ({user.id})", inline=False)
+        else:
+            embed.set_author(name="System")
+            embed.add_field(name="Executor", value="System", inline=False)
+
+        embed.add_field(name="Action", value=f"`{action_name}`", inline=True)
+        embed.add_field(name="Category", value=self._audit_category_icon(action), inline=True)
+
+        target_str = self._audit_target_str(target)
+        embed.add_field(name="Target", value=target_str, inline=False)
+
+        # Changes (before → after)
+        changes = entry.changes
+        before_dict = {
+            k: v for k, v in vars(changes.before).items() if not k.startswith("_")
+        } if changes.before else {}
+        after_dict = {
+            k: v for k, v in vars(changes.after).items() if not k.startswith("_")
+        } if changes.after else {}
+
+        if before_dict or after_dict:
+            all_keys = set(before_dict) | set(after_dict)
+            change_lines = []
+            for key in sorted(all_keys):
+                b = before_dict.get(key)
+                a = after_dict.get(key)
+                label = key.replace("_", " ").title()
+                if b != a:
+                    change_lines.append(f"**{label}:** {self._fmt_val(b)} → {self._fmt_val(a)}")
+                else:
+                    change_lines.append(f"**{label}:** {self._fmt_val(b)}")
+            change_text = "\n".join(change_lines)
+            for i in range(0, len(change_text), 1024):
+                embed.add_field(
+                    name="Changes" if i == 0 else "Changes (cont.)",
+                    value=change_text[i:i + 1024],
+                    inline=False
                 )
-                embed.set_author(name=user.name, icon_url=user.display_avatar.url)
-                embed.add_field(name="Action", value=action.replace("_", " ").title(), inline=False)
-                embed.add_field(name="Executor", value=f"{user} ({user.id})", inline=False)
-                embed.add_field(name="Target", value=f"{target_display} ({getattr(target, 'id', 'N/A')})", inline=False)
-                embed.add_field(name="Reason", value=reason, inline=False)
-                embed.add_field(name="Time", value=format_dt(timestamp, style='F'), inline=False)
 
-                if entry.action.name == "message_delete":
-                    if isinstance(target, discord.Message):
-                        embed.add_field(name="Deleted In", value=f"<#{target.channel.id}>", inline=False)
-                    elif hasattr(entry.extra, "channel"):
-                        embed.add_field(name="Deleted In", value=f"<#{entry.extra.channel.id}>", inline=False)
+        # Extra info
+        extra = entry.extra
+        if extra is not None:
+            extra_lines = []
+            extra_dict = vars(extra) if not isinstance(extra, (int, str)) else {}
+            for ek, ev in extra_dict.items():
+                if not ek.startswith("_"):
+                    extra_lines.append(f"**{ek.replace('_', ' ').title()}:** {self._fmt_val(ev)}")
+            if extra_lines:
+                extra_text = "\n".join(extra_lines)
+                embed.add_field(name="Extra Info", value=extra_text[:1024], inline=False)
 
-                await channel.send(embed=embed)
+        if reason:
+            embed.add_field(name="Reason", value=reason[:1024], inline=False)
+
+        embed.add_field(name="Timestamp", value=format_dt(timestamp, style="F"), inline=False)
+        embed.set_footer(text=f"Audit Log ID: {entry.id}")
+
+        return embed
+
+    @staticmethod
+    def _audit_category_icon(action):
+        if action.category == discord.AuditLogActionCategory.create:
+            return "Create"
+        if action.category == discord.AuditLogActionCategory.update:
+            return "Update"
+        if action.category == discord.AuditLogActionCategory.delete:
+            return "Delete"
+        name = action.name
+        if name in ("kick",):
+            return "Kick"
+        if name in ("ban",):
+            return "Ban"
+        if name in ("unban",):
+            return "Unban"
+        if name in ("message_delete",):
+            return "Message Delete"
+        if name in ("message_bulk_delete",):
+            return "Bulk Delete"
+        if name in ("message_pin",):
+            return "Pin"
+        if name in ("message_unpin",):
+            return "Unpin"
+        if name in ("member_prune",):
+            return "Prune"
+        if name in ("member_move",):
+            return "Move"
+        if name in ("member_disconnect",):
+            return "Disconnect"
+        if name in ("bot_add",):
+            return "Bot Add"
+        return "Other"
 
 
 async def setup(bot):

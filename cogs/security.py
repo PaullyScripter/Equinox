@@ -13,7 +13,6 @@ class SecurityCog(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="auditlogsetup", description="Enable or disable audit logging.")
-    @app_commands.checks.has_permissions(administrator=True)
     # @app_commands.describe(state="Turn audit logging on or off")
     async def auditlogsetup(self, interaction: discord.Interaction, state: Literal["on", "off"]):
         from state import load_audit_config, save_audit_config
@@ -24,17 +23,22 @@ class SecurityCog(commands.Cog):
         config = load_audit_config()
         gid = str(interaction.guild_id)
 
+        current = config.get(gid, {}).get("enabled", False)
+        current_str = "on" if current else "off"
+
         if gid not in config:
             config[gid] = {}
 
         config[gid]["enabled"] = state == "on"
         save_audit_config(config)
 
-        await interaction.response.send_message(f"Audit logging has been turned **{state}**.", ephemeral=True)
+        await interaction.response.send_message(
+            f"Audit logging changed from **{current_str}** → **{state}**.",
+            ephemeral=True
+        )
 
 
     @app_commands.command(name="auditlogchannel", description="Set a channel to receive audit log entries.")
-    @app_commands.checks.has_permissions(administrator=True)
     # @app_commands.describe(channel="Channel to send audit logs to")
     async def auditlogchannel(self, interaction: discord.Interaction, channel: discord.TextChannel):
         from state import load_audit_config, save_audit_config
@@ -48,17 +52,26 @@ class SecurityCog(commands.Cog):
         if gid not in config:
             config[gid] = {}
 
+        current_id = config[gid].get("channel")
+        current_mention = f"<#{current_id}>" if current_id else "None"
+
         config[gid]["channel"] = channel.id
         save_audit_config(config)
 
-        await interaction.response.send_message(f"Audit log channel set to {channel.mention}.", ephemeral=True)
+        await interaction.response.send_message(
+            f"Audit log channel changed from {current_mention} → {channel.mention}.",
+            ephemeral=True
+        )
 
 
     @app_commands.command(name="auditlogdownload", description="Download server audit logs for the past X days.")
-    @app_commands.checks.has_permissions(administrator=True)
     # @app_commands.describe(duration="Number of days (1-7)")
     async def auditlogdownload(self, interaction: discord.Interaction, duration: app_commands.Range[int, 1, 7]):
         from state import load_audit_config, read_audit_log
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You need admin permissions.", ephemeral=True)
+            return
+
         config = load_audit_config()
         gid = str(interaction.guild_id)
 
@@ -67,22 +80,52 @@ class SecurityCog(commands.Cog):
             return
 
         now = datetime.now(timezone.utc)
-
         cutoff = now - timedelta(days=duration)
 
         logs = read_audit_log(interaction.guild_id)
-        filtered = [line for line in logs if line.strip() and datetime.fromisoformat(line.split(" | ")[0]).replace(tzinfo=timezone.utc) >= cutoff]
+        filtered = []
+        skipped = 0
+        for line in logs:
+            if not line.strip():
+                continue
+            try:
+                ts_str = line.split(" | ")[0]
+                ts = datetime.fromisoformat(ts_str).replace(tzinfo=timezone.utc)
+                if ts >= cutoff:
+                    filtered.append(line)
+            except (ValueError, IndexError):
+                skipped += 1
 
         if not filtered:
-            await interaction.response.send_message("No logs found in that duration.", ephemeral=True)
+            msg = "No logs found in that duration."
+            if skipped:
+                msg += f" ({skipped} unreadable lines skipped)"
+            await interaction.response.send_message(msg, ephemeral=True)
             return
 
-        path = f"audit_logs/{interaction.guild_id}.txt"
-        with open(path, "w", encoding="utf-8") as f:
-            f.writelines(filtered)
+        import tempfile
+        tmp = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".txt", delete=False)
+        tmp_path = tmp.name
+        try:
+            tmp.writelines(filtered)
+            tmp.close()
 
-        await interaction.response.send_message("Here are the logs:", ephemeral=True)
-        await interaction.followup.send(file=discord.File(path), ephemeral=True)
+            size = os.path.getsize(tmp_path)
+            max_size = 25 * 1024 * 1024
+            if size > max_size:
+                await interaction.response.send_message(
+                    f"Filtered logs are too large ({size / 1024 / 1024:.1f}MB). Reduce duration.",
+                    ephemeral=True
+                )
+                return
+
+            msg = "Here are the logs:"
+            if skipped:
+                msg += f" ({skipped} unreadable lines skipped)"
+            await interaction.response.send_message(msg, ephemeral=True)
+            await interaction.followup.send(file=discord.File(tmp_path), ephemeral=True)
+        finally:
+            os.unlink(tmp_path)
 
 
 
