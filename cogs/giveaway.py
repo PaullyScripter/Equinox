@@ -174,9 +174,7 @@ class GiveawayCog(commands.Cog):
     # @app_commands.describe(duration="Giveaway's duration (e.g., 1s, 2m, 3h, 4d)", prize="Giveaway's prize", hosts="Comma-separated list of host IDs (userID, roleID)")
     @app_commands.checks.has_permissions(manage_messages=True)
     async def giveaway(self, interaction: discord.Interaction, duration: str, prize: str, hosts: str = None):
-        import sys as _sys
-        is_premium = _sys.modules["__main__"].is_premium
-        BuyPremium = _sys.modules["__main__"].BuyPremium
+        from state import is_premium, BuyPremium
         await interaction.response.defer()
 
         guild_id = interaction.guild.id

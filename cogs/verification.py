@@ -24,12 +24,7 @@ class VerificationCog(commands.Cog):
         message: Optional[str],
         image: Optional[str]
     ):
-        import sys as _sys
-        BuyPremium2 = _sys.modules["__main__"].BuyPremium2
-        DeleteVerifySystem = _sys.modules["__main__"].DeleteVerifySystem
-        VerifyButton = _sys.modules["__main__"].VerifyButton
-        is_premium = _sys.modules["__main__"].is_premium
-        refresh = _sys.modules["__main__"].refresh
+        from state import BuyPremium2, DeleteVerifySystem, VerifyButton, is_premium, refresh
         await interaction.response.defer()
         description = "```Each user will have 120 seconds (2mins) to complete captcha.```"
         can_image = False

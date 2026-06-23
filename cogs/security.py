@@ -16,10 +16,8 @@ class SecurityCog(commands.Cog):
     @app_commands.checks.has_permissions(administrator=True)
     # @app_commands.describe(state="Turn audit logging on or off")
     async def auditlogsetup(self, interaction: discord.Interaction, state: Literal["on", "off"]):
+        from state import load_audit_config, save_audit_config
         if not interaction.user.guild_permissions.administrator:
-            import sys as _sys
-            load_audit_config = _sys.modules["__main__"].load_audit_config
-            save_audit_config = _sys.modules["__main__"].save_audit_config
             await interaction.response.send_message("You need admin permissions.", ephemeral=True)
             return
 
@@ -39,10 +37,8 @@ class SecurityCog(commands.Cog):
     @app_commands.checks.has_permissions(administrator=True)
     # @app_commands.describe(channel="Channel to send audit logs to")
     async def auditlogchannel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        from state import load_audit_config, save_audit_config
         if not interaction.user.guild_permissions.administrator:
-            import sys as _sys
-            load_audit_config = _sys.modules["__main__"].load_audit_config
-            save_audit_config = _sys.modules["__main__"].save_audit_config
             await interaction.response.send_message("You need admin permissions.", ephemeral=True)
             return
 
@@ -62,10 +58,8 @@ class SecurityCog(commands.Cog):
     @app_commands.checks.has_permissions(administrator=True)
     # @app_commands.describe(duration="Number of days (1-7)")
     async def auditlogdownload(self, interaction: discord.Interaction, duration: app_commands.Range[int, 1, 7]):
+        from state import load_audit_config, read_audit_log
         config = load_audit_config()
-        import sys as _sys
-        load_audit_config = _sys.modules["__main__"].load_audit_config
-        read_audit_log = _sys.modules["__main__"].read_audit_log
         gid = str(interaction.guild_id)
 
         if not config.get(gid, {}).get("enabled", False):
@@ -94,13 +88,8 @@ class SecurityCog(commands.Cog):
 
     @app_commands.command(name="scam_enable", description="Enable Anti-Scam in this channel (log channel required)")
     async def scam_enable(self, interaction: discord.Interaction):
+        from state import COLOR_OK, admin_or_manage_guild, embed_basic, get_guild_cfg, update_guild_cfg
         if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
-        import sys as _sys
-        COLOR_OK = _sys.modules["__main__"].COLOR_OK
-        admin_or_manage_guild = _sys.modules["__main__"].admin_or_manage_guild
-        embed_basic = _sys.modules["__main__"].embed_basic
-        get_guild_cfg = _sys.modules["__main__"].get_guild_cfg
-        update_guild_cfg = _sys.modules["__main__"].update_guild_cfg
         cfg = get_guild_cfg(interaction.guild_id)
         if not cfg.get("log_channel_id"): return await interaction.response.send_message("Set a **log channel** first with `/set_log_channel`.", ephemeral=True)
         chans = set(cfg.get("scam_channels") or []); chans.add(interaction.channel_id)
@@ -110,13 +99,8 @@ class SecurityCog(commands.Cog):
 
     @app_commands.command(name="scam_disable", description="Disable Anti-Scam in this channel")
     async def scam_disable(self, interaction: discord.Interaction):
+        from state import COLOR_WARN, admin_or_manage_guild, embed_basic, get_guild_cfg, update_guild_cfg
         if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
-        import sys as _sys
-        COLOR_WARN = _sys.modules["__main__"].COLOR_WARN
-        admin_or_manage_guild = _sys.modules["__main__"].admin_or_manage_guild
-        embed_basic = _sys.modules["__main__"].embed_basic
-        get_guild_cfg = _sys.modules["__main__"].get_guild_cfg
-        update_guild_cfg = _sys.modules["__main__"].update_guild_cfg
         cfg = get_guild_cfg(interaction.guild_id)
         chans = set(cfg.get("scam_channels") or []); chans.discard(interaction.channel_id)
         update_guild_cfg(interaction.guild_id, scam_channels=sorted(chans))
@@ -126,12 +110,7 @@ class SecurityCog(commands.Cog):
     @app_commands.command(name="codehelper_enable", description="Enable Inline Code Helper in this channel")
     async def codehelper_enable(self, interaction: discord.Interaction):
         if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
-        import sys as _sys
-        COLOR_OK = _sys.modules["__main__"].COLOR_OK
-        admin_or_manage_guild = _sys.modules["__main__"].admin_or_manage_guild
-        embed_basic = _sys.modules["__main__"].embed_basic
-        get_guild_cfg = _sys.modules["__main__"].get_guild_cfg
-        update_guild_cfg = _sys.modules["__main__"].update_guild_cfg
+        from state import COLOR_OK, admin_or_manage_guild, embed_basic, get_guild_cfg, update_guild_cfg
         cfg = get_guild_cfg(interaction.guild_id)
         chans = set(cfg.get("codehelper_channels") or []); chans.add(interaction.channel_id)
         update_guild_cfg(interaction.guild_id, codehelper_channels=sorted(chans))
@@ -141,12 +120,7 @@ class SecurityCog(commands.Cog):
     @app_commands.command(name="codehelper_disable", description="Disable Inline Code Helper in this channel")
     async def codehelper_disable(self, interaction: discord.Interaction):
         if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
-        import sys as _sys
-        COLOR_WARN = _sys.modules["__main__"].COLOR_WARN
-        admin_or_manage_guild = _sys.modules["__main__"].admin_or_manage_guild
-        embed_basic = _sys.modules["__main__"].embed_basic
-        get_guild_cfg = _sys.modules["__main__"].get_guild_cfg
-        update_guild_cfg = _sys.modules["__main__"].update_guild_cfg
+        from state import COLOR_WARN, admin_or_manage_guild, embed_basic, get_guild_cfg, update_guild_cfg
         cfg = get_guild_cfg(interaction.guild_id)
         chans = set(cfg.get("codehelper_channels") or []); chans.discard(interaction.channel_id)
         update_guild_cfg(interaction.guild_id, codehelper_channels=sorted(chans))
@@ -157,11 +131,7 @@ class SecurityCog(commands.Cog):
     # @app_commands.describe(channel="Select a channel to receive scam logs")
     async def set_log_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
         if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
-        import sys as _sys
-        COLOR_OK = _sys.modules["__main__"].COLOR_OK
-        admin_or_manage_guild = _sys.modules["__main__"].admin_or_manage_guild
-        embed_basic = _sys.modules["__main__"].embed_basic
-        update_guild_cfg = _sys.modules["__main__"].update_guild_cfg
+        from state import COLOR_OK, admin_or_manage_guild, embed_basic, update_guild_cfg
         update_guild_cfg(interaction.guild_id, log_channel_id=channel.id)
         await interaction.response.send_message(embed=embed_basic("Log Channel Set", f"Logs → {channel.mention}", COLOR_OK), ephemeral=True)
 
@@ -171,13 +141,7 @@ class SecurityCog(commands.Cog):
     # @app_commands.describe(phrase="Exact phrase to allow (it will be normalized)")
     async def allowlist_phrase_add(self, interaction: discord.Interaction, phrase: str):
         if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
-        import sys as _sys
-        COLOR_OK = _sys.modules["__main__"].COLOR_OK
-        admin_or_manage_guild = _sys.modules["__main__"].admin_or_manage_guild
-        embed_basic = _sys.modules["__main__"].embed_basic
-        get_guild_cfg = _sys.modules["__main__"].get_guild_cfg
-        normalize_phrase = _sys.modules["__main__"].normalize_phrase
-        update_guild_cfg = _sys.modules["__main__"].update_guild_cfg
+        from state import COLOR_OK, admin_or_manage_guild, embed_basic, get_guild_cfg, normalize_phrase, update_guild_cfg
         cfg = get_guild_cfg(interaction.guild_id); phrases = set(cfg.get("phrase_allowlist") or [])
         phrases.add(normalize_phrase(phrase)); update_guild_cfg(interaction.guild_id, phrase_allowlist=sorted(phrases))
         await interaction.response.send_message(embed=embed_basic("Phrase allowlisted", f"“{phrase}”", COLOR_OK), ephemeral=True)
@@ -187,13 +151,7 @@ class SecurityCog(commands.Cog):
     # @app_commands.describe(phrase="Exact phrase to remove (normalized)")
     async def allowlist_phrase_remove(self, interaction: discord.Interaction, phrase: str):
         if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
-        import sys as _sys
-        COLOR_OK = _sys.modules["__main__"].COLOR_OK
-        admin_or_manage_guild = _sys.modules["__main__"].admin_or_manage_guild
-        embed_basic = _sys.modules["__main__"].embed_basic
-        get_guild_cfg = _sys.modules["__main__"].get_guild_cfg
-        normalize_phrase = _sys.modules["__main__"].normalize_phrase
-        update_guild_cfg = _sys.modules["__main__"].update_guild_cfg
+        from state import COLOR_OK, admin_or_manage_guild, embed_basic, get_guild_cfg, normalize_phrase, update_guild_cfg
         cfg = get_guild_cfg(interaction.guild_id); phrases = set(cfg.get("phrase_allowlist") or [])
         norm = normalize_phrase(phrase)
         if norm in phrases: phrases.remove(norm); update_guild_cfg(interaction.guild_id, phrase_allowlist=sorted(phrases))
@@ -203,10 +161,7 @@ class SecurityCog(commands.Cog):
     @app_commands.command(name="allowlist_phrase_list", description="List allowlisted phrases")
     async def allowlist_phrase_list(self, interaction: discord.Interaction):
         cfg = get_guild_cfg(interaction.guild_id); phrases = cfg.get("phrase_allowlist") or []
-        import sys as _sys
-        COLOR_INFO = _sys.modules["__main__"].COLOR_INFO
-        embed_basic = _sys.modules["__main__"].embed_basic
-        get_guild_cfg = _sys.modules["__main__"].get_guild_cfg
+        from state import COLOR_INFO, embed_basic, get_guild_cfg
         text = "\n".join(f"• {p}" for p in phrases) or "No phrases."
         await interaction.response.send_message(embed=embed_basic("Phrase Allowlist", text, COLOR_INFO), ephemeral=True)
 
@@ -216,12 +171,7 @@ class SecurityCog(commands.Cog):
     # @app_commands.describe(text="The text to scan (paste your message here)")
     async def scan_test(self, interaction: discord.Interaction, text: str):
         cfg = get_guild_cfg(interaction.guild_id)
-        import sys as _sys
-        COLOR_INFO = _sys.modules["__main__"].COLOR_INFO
-        embed_basic = _sys.modules["__main__"].embed_basic
-        extract_domains = _sys.modules["__main__"].extract_domains
-        get_guild_cfg = _sys.modules["__main__"].get_guild_cfg
-        scan_message_for_scams = _sys.modules["__main__"].scan_message_for_scams
+        from state import COLOR_INFO, embed_basic, extract_domains, get_guild_cfg, scan_message_for_scams
         domains = extract_domains(text); reasons = scan_message_for_scams(text, cfg)
         e = embed_basic("Scan Test", "", COLOR_INFO)
         e.add_field(name="Domains parsed", value=", ".join(domains) or "—", inline=False)
@@ -233,11 +183,7 @@ class SecurityCog(commands.Cog):
     # @app_commands.describe(code="Your Python code (paste up to ~1800 chars)")
     async def lint(self, interaction: discord.Interaction, code: str):
         ok, detail = try_python_syntax_check(code)
-        import sys as _sys
-        COLOR_BAD = _sys.modules["__main__"].COLOR_BAD
-        COLOR_OK = _sys.modules["__main__"].COLOR_OK
-        embed_basic = _sys.modules["__main__"].embed_basic
-        try_python_syntax_check = _sys.modules["__main__"].try_python_syntax_check
+        from state import COLOR_BAD, COLOR_OK, embed_basic, try_python_syntax_check
         e = embed_basic("Python Syntax Check" if ok else "Python Syntax Error", ("✅ " if ok else "❌ ") + detail, COLOR_OK if ok else COLOR_BAD)
         e.add_field(name="Excerpt", value=f"```py\n{code[:800]}\n```", inline=False)
         await interaction.response.send_message(embed=e, ephemeral=True)
@@ -246,10 +192,7 @@ class SecurityCog(commands.Cog):
     @app_commands.command(name="debug_safety", description="Diagnose readiness & config")
     async def debug_safety(self, interaction: discord.Interaction):
         cfg = get_guild_cfg(interaction.guild_id)
-        import sys as _sys
-        COLOR_INFO = _sys.modules["__main__"].COLOR_INFO
-        embed_basic = _sys.modules["__main__"].embed_basic
-        get_guild_cfg = _sys.modules["__main__"].get_guild_cfg
+        from state import COLOR_INFO, embed_basic, get_guild_cfg
         has_mc = getattr(self.bot.intents, "message_content", False)
         has_mem = getattr(self.bot.intents, "members", False)
         lines = [
@@ -272,15 +215,7 @@ class SecurityCog(commands.Cog):
         action: Optional[Literal["add","remove"]] = None
     ):
            
-        import sys as _sys
-        COLOR_INFO = _sys.modules["__main__"].COLOR_INFO
-        COLOR_OK = _sys.modules["__main__"].COLOR_OK
-        COLOR_WARN = _sys.modules["__main__"].COLOR_WARN
-        admin_or_manage_guild = _sys.modules["__main__"].admin_or_manage_guild
-        embed_basic = _sys.modules["__main__"].embed_basic
-        get_guild_cfg = _sys.modules["__main__"].get_guild_cfg
-        normalize_phrase = _sys.modules["__main__"].normalize_phrase
-        update_guild_cfg = _sys.modules["__main__"].update_guild_cfg
+        from state import COLOR_INFO, COLOR_OK, COLOR_WARN, admin_or_manage_guild, embed_basic, get_guild_cfg, normalize_phrase, update_guild_cfg
         if not admin_or_manage_guild(interaction):
             return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
 
@@ -378,14 +313,7 @@ class SecurityCog(commands.Cog):
         action: Optional[Literal["add","remove"]] = None
     ):
            
-        import sys as _sys
-        COLOR_INFO = _sys.modules["__main__"].COLOR_INFO
-        COLOR_OK = _sys.modules["__main__"].COLOR_OK
-        COLOR_WARN = _sys.modules["__main__"].COLOR_WARN
-        admin_or_manage_guild = _sys.modules["__main__"].admin_or_manage_guild
-        embed_basic = _sys.modules["__main__"].embed_basic
-        get_guild_cfg = _sys.modules["__main__"].get_guild_cfg
-        update_guild_cfg = _sys.modules["__main__"].update_guild_cfg
+        from state import COLOR_INFO, COLOR_OK, COLOR_WARN, admin_or_manage_guild, embed_basic, get_guild_cfg, update_guild_cfg
         if not admin_or_manage_guild(interaction):
             return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
 
@@ -454,11 +382,7 @@ class SecurityCog(commands.Cog):
 
     @app_commands.command(name="status", description="Show current security & code-helper configuration for this server")
     async def status(self, interaction: discord.Interaction):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        get_guild_cfg = _m.get_guild_cfg
-        embed_basic = _m.embed_basic
-        COLOR_INFO = _m.COLOR_INFO
+        from state import get_guild_cfg, embed_basic, COLOR_INFO
         cfg = get_guild_cfg(interaction.guild_id)
         lines = [
             f"• Scam channels: {', '.join(f'<#{c}>' for c in (cfg.get('scam_channels') or [])) or 'None'}",
@@ -475,12 +399,7 @@ class SecurityCog(commands.Cog):
         description="Show the youngest account and list all accounts younger than a duration (e.g., 1m, 1y, 1d, 30min)"
     )
     async def youngest(self, interaction: discord.Interaction, duration: str):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        parse_duration_to_timedelta = _m.parse_duration_to_timedelta
-        fmt_discord_time = _m.fmt_discord_time
-        _chunk_lines = _m._chunk_lines
-        YoungestView = _m.YoungestView
+        from state import parse_duration_to_timedelta, fmt_discord_time, _chunk_lines, YoungestView
         secs = parse_duration_to_timedelta(duration)
         if secs is None:
             return await interaction.response.send_message(

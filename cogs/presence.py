@@ -22,9 +22,7 @@ class PresenceCog(commands.Cog):
     ])
     async def server_member_activity(self, interaction: discord.Interaction, status: app_commands.Choice[str]):
         guild = interaction.guild
-        import sys as _sys
-        PRIVACY_SET = _sys.modules["__main__"].PRIVACY_SET
-        PresencePaginator = _sys.modules["__main__"].PresencePaginator
+        from state import PRIVACY_SET, PresencePaginator
         if not guild:
             return await interaction.response.send_message("Command must be used in a server.", ephemeral=True)
 
@@ -95,9 +93,7 @@ class PresenceCog(commands.Cog):
 
     @app_commands.command(name="top_games", description="Show the top games currently being played in this server.")
     async def top_games(self, interaction: discord.Interaction):
-
-        import sys as _sys
-        PRIVACY_SET = _sys.modules["__main__"].PRIVACY_SET
+        from state import PRIVACY_SET
         guild = interaction.guild
         if not guild:
             return await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
@@ -136,11 +132,8 @@ class PresenceCog(commands.Cog):
     @app_commands.command(name="now_playing", description="See what a user is currently playing or doing.")
     # @app_commands.describe(user="The user to check.")
     async def now_playing(self, interaction: discord.Interaction, user: discord.Member):
-
-                                     
-        import sys as _sys
-        PRIVACY_SET = _sys.modules["__main__"].PRIVACY_SET
-        if user.id in PRIVACY_SET:
+        from state import PRIVACY_SET, STATUS_PRIVACY_SET
+        if user.id in PRIVACY_SET or user.id in STATUS_PRIVACY_SET:
             return await interaction.response.send_message(
                 "❌ This user has opted out of presence tracking.",
                 ephemeral=True
@@ -232,8 +225,7 @@ class PresenceCog(commands.Cog):
         interaction: discord.Interaction,
         role: discord.Role,
     ):
-        import sys as _sys
-        PRIVACY_SET = _sys.modules["__main__"].PRIVACY_SET
+        from state import PRIVACY_SET
         guild = interaction.guild
         if not guild:
             return await interaction.response.send_message(
@@ -281,11 +273,7 @@ class PresenceCog(commands.Cog):
         description="Advanced member analytics: overview, top roles, and age graph."
     )
     async def server_member_stats(self, interaction: discord.Interaction):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        admin_or_manage_guild = _m.admin_or_manage_guild
-        MemberStatsView = _m.MemberStatsView
-        build_overview_embed = _m.build_overview_embed
+        from state import admin_or_manage_guild, MemberStatsView, build_overview_embed
         if not admin_or_manage_guild(interaction):
             return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
 
@@ -332,9 +320,8 @@ class PrivacyView(discord.ui.View):
 
     @staticmethod
     def build_embed(user_id, guild_id, selected_category):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        data = _m.load_privacy_settings()
+        from state import load_privacy_settings, load_server_data
+        data = load_privacy_settings()
         uid = str(user_id)
         cats = data.get(uid, [])
 
@@ -346,7 +333,7 @@ class PrivacyView(discord.ui.View):
         ]
 
         if guild_id:
-            server_data = _m.load_server_data(str(guild_id))
+            server_data = load_server_data(str(guild_id))
             opted_out_msgs = server_data.get("opted_out_users", []) if server_data else []
             msg_disabled = str(user_id) in opted_out_msgs
             items.append(("messages", "Message Tracking", "Whether your messages are counted on this server"))
@@ -375,8 +362,7 @@ class PrivacyView(discord.ui.View):
             self.enable_button.disabled = True
             self.disable_button.disabled = True
             return
-        import sys as _sys
-        _m = _sys.modules["__main__"]
+        from state import load_server_data, load_privacy_settings
         uid = self.user_id
 
         if self.selected_category == "messages":
@@ -384,11 +370,11 @@ class PrivacyView(discord.ui.View):
                 self.enable_button.disabled = True
                 self.disable_button.disabled = True
                 return
-            server_data = _m.load_server_data(str(self.guild_id))
+            server_data = load_server_data(str(self.guild_id))
             opted_out = server_data.get("opted_out_users", []) if server_data else []
             is_opted_out = str(uid) in opted_out
         else:
-            data = _m.load_privacy_settings()
+            data = load_privacy_settings()
             ustr = str(uid)
             opted_out_cats = data.get(ustr, [])
             is_opted_out = self.selected_category in opted_out_cats
@@ -398,28 +384,27 @@ class PrivacyView(discord.ui.View):
 
     @discord.ui.button(label="Enable", style=discord.ButtonStyle.success, row=1)
     async def enable_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
+        from state import load_server_data, save_server_data, load_privacy_settings, save_privacy_settings, reload_privacy_sets
 
         if self.selected_category == "messages":
             if not self.guild_id:
                 return await interaction.response.send_message("❌ This setting is only available in a server.", ephemeral=True)
-            server_data = _m.load_server_data(str(self.guild_id))
+            server_data = load_server_data(str(self.guild_id))
             if not server_data:
                 return await interaction.response.send_message("❌ Message counter has not been set up for this server.", ephemeral=True)
             opted_out = server_data.setdefault("opted_out_users", [])
             if str(self.user_id) in opted_out:
                 opted_out.remove(str(self.user_id))
-            _m.save_server_data(str(self.guild_id), server_data)
+            save_server_data(str(self.guild_id), server_data)
         else:
-            data = _m.load_privacy_settings()
+            data = load_privacy_settings()
             ustr = str(self.user_id)
             if ustr not in data:
                 data[ustr] = []
             if self.selected_category in data[ustr]:
                 data[ustr].remove(self.selected_category)
-            _m.save_privacy_settings(data)
-            _m.reload_privacy_sets()
+            save_privacy_settings(data)
+            reload_privacy_sets()
 
         embed = PrivacyView.build_embed(self.user_id, self.guild_id, None)
         await interaction.response.edit_message(embed=embed, view=PrivacyView(self.user_id, self.guild_id))
@@ -427,28 +412,27 @@ class PrivacyView(discord.ui.View):
 
     @discord.ui.button(label="Disable", style=discord.ButtonStyle.danger, row=1)
     async def disable_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
+        from state import load_server_data, save_server_data, load_privacy_settings, save_privacy_settings, reload_privacy_sets
 
         if self.selected_category == "messages":
             if not self.guild_id:
                 return await interaction.response.send_message("❌ This setting is only available in a server.", ephemeral=True)
-            server_data = _m.load_server_data(str(self.guild_id))
+            server_data = load_server_data(str(self.guild_id))
             if not server_data:
                 return await interaction.response.send_message("❌ Message counter has not been set up for this server.", ephemeral=True)
             opted_out = server_data.setdefault("opted_out_users", [])
             if str(self.user_id) not in opted_out:
                 opted_out.append(str(self.user_id))
-            _m.save_server_data(str(self.guild_id), server_data)
+            save_server_data(str(self.guild_id), server_data)
         else:
-            data = _m.load_privacy_settings()
+            data = load_privacy_settings()
             ustr = str(self.user_id)
             if ustr not in data:
                 data[ustr] = []
             if self.selected_category not in data[ustr]:
                 data[ustr].append(self.selected_category)
-            _m.save_privacy_settings(data)
-            _m.reload_privacy_sets()
+            save_privacy_settings(data)
+            reload_privacy_sets()
 
         embed = PrivacyView.build_embed(self.user_id, self.guild_id, None)
         await interaction.response.edit_message(embed=embed, view=PrivacyView(self.user_id, self.guild_id))

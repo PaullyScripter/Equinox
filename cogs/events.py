@@ -12,16 +12,7 @@ class EventsCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        import sys as _sys
-        _m = _sys.modules['__main__']
-        ReactionRoleView = getattr(_m, 'ReactionRoleView', None)
-        ScamFeedbackView = getattr(_m, 'ScamFeedbackView', None)
-        client = _m.client
-        char1 = _m.char1
-        read_json = _m.read_json
-        write_json = _m.write_json
-        load_data = _m.load_data
-        init_db_pool = _m.init_db_pool
+        from state import ReactionRoleView, ScamFeedbackView, client, char1, read_json, write_json, load_data, init_db_pool
         await init_db_pool(min_size=1, max_size=5)
         await self.bot.change_presence(
             status=discord.Status.idle,
@@ -93,9 +84,7 @@ class EventsCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
-      import sys as _sys
-      load_autoping_channels = _sys.modules["__main__"].load_autoping_channels
-      load_autorole = _sys.modules["__main__"].load_autorole
+      from state import load_autoping_channels, load_autorole
       if member.guild.id == 1243501449879752775:
         if not member.bot:
           guild = member.guild
@@ -143,8 +132,7 @@ class EventsCog(commands.Cog):
         interaction: discord.Interaction,
         command: discord.app_commands.Command
     ):
-        import sys as _sys
-        _log_command = _sys.modules["__main__"]._log_command
+        from state import _log_command
         if interaction.user and not interaction.user.bot:
             _log_command(interaction.user.id, command.qualified_name)
 
@@ -152,28 +140,7 @@ class EventsCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        load_server_data = _m.load_server_data
-        save_server_data = _m.save_server_data
-        PREFIX = _m.PREFIX
-        _log_command = _m._log_command
-        load_audit_config = _m.load_audit_config
-        append_audit_log = _m.append_audit_log
-        get_guild_cfg = _m.get_guild_cfg
-        is_scam_whitelisted = _m.is_scam_whitelisted
-        scan_message_for_scams = _m.scan_message_for_scams
-        load_actions = _m.load_actions
-        save_actions = _m.save_actions
-        extract_domains = _m.extract_domains
-        embed_basic = _m.embed_basic
-        COLOR_BAD = _m.COLOR_BAD
-        COLOR_WARN = _m.COLOR_WARN
-        COLOR_OK = _m.COLOR_OK
-        CODEBLOCK_CLOSED_RE = _m.CODEBLOCK_CLOSED_RE
-        CODEBLOCK_UNTERMINATED_RE = _m.CODEBLOCK_UNTERMINATED_RE
-        try_python_syntax_check = _m.try_python_syntax_check
-        ScamFeedbackView = _m.ScamFeedbackView
+        from state import load_server_data, save_server_data, PREFIX, _log_command, load_audit_config, append_audit_log, get_guild_cfg, is_scam_whitelisted, scan_message_for_scams, load_actions, save_actions, extract_domains, embed_basic, COLOR_BAD, COLOR_WARN, COLOR_OK, CODEBLOCK_CLOSED_RE, CODEBLOCK_UNTERMINATED_RE, try_python_syntax_check, ScamFeedbackView
 
         if message.author.bot:
             return
@@ -311,10 +278,7 @@ class EventsCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_audit_log_entry_create(self, entry: discord.AuditLogEntry):
-        import sys as _sys
-        _m = _sys.modules["__main__"]
-        load_audit_config = _m.load_audit_config
-        append_audit_log = _m.append_audit_log
+        from state import load_audit_config, append_audit_log
         guild = entry.guild
         config = load_audit_config()
         gid = str(guild.id)

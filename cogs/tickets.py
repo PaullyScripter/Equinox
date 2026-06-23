@@ -35,9 +35,7 @@ class TicketsCog(commands.Cog):
         role: Optional[str],
         ticket_message: Optional[str]
     ):
-        import sys as _sys
-        is_premium = _sys.modules["__main__"].is_premium
-        refresh = _sys.modules["__main__"].refresh
+        from state import is_premium, refresh
         refresh()
 
         guild_id = interaction.guild.id
