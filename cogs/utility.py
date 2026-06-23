@@ -36,64 +36,417 @@ async def app_translate(interaction: discord.Interaction, message: discord.Messa
     view.message = msg
 
 
+# ---------------------------------------------------------------------------
+# Embed Builder — modals, view, and command
+# ---------------------------------------------------------------------------
+
+class _AuthorModal(discord.ui.Modal):
+    def __init__(self, view: "EmbedBuilderView"):
+        super().__init__(title="Embed Author")
+        self.view = view
+        cur = view.embed.author
+        self.name_inp = discord.ui.TextInput(
+            label="Author Name",
+            placeholder="e.g. Equinox Bot",
+            required=False,
+            max_length=256,
+            default=cur.name or "",
+        )
+        self.icon_inp = discord.ui.TextInput(
+            label="Author Icon URL",
+            placeholder="https://example.com/icon.png",
+            required=False,
+            default=cur.icon_url or "",
+        )
+        self.add_item(self.name_inp)
+        self.add_item(self.icon_inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        name = self.name_inp.value.strip()
+        icon = self.icon_inp.value.strip()
+        if name:
+            self.view.embed.set_author(name=name, icon_url=icon or None)
+        else:
+            self.view.embed.remove_author()
+        await self.view.refresh(interaction)
+
+
+class _TitleModal(discord.ui.Modal):
+    def __init__(self, view: "EmbedBuilderView"):
+        super().__init__(title="Embed Title")
+        self.view = view
+        self.inp = discord.ui.TextInput(
+            label="Title",
+            placeholder="Embed title",
+            max_length=256,
+            default=view.embed.title or "",
+        )
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        val = self.inp.value.strip()
+        self.view.embed.title = val or None
+        await self.view.refresh(interaction)
+
+
+class _DescriptionModal(discord.ui.Modal):
+    def __init__(self, view: "EmbedBuilderView"):
+        super().__init__(title="Embed Description")
+        self.view = view
+        self.inp = discord.ui.TextInput(
+            label="Description",
+            placeholder="Embed description",
+            style=discord.TextStyle.paragraph,
+            required=False,
+            max_length=4000,
+            default=view.embed.description or "",
+        )
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        val = self.inp.value.strip()
+        self.view.embed.description = val or None
+        await self.view.refresh(interaction)
+
+
+class _ColorModal(discord.ui.Modal):
+    def __init__(self, view: "EmbedBuilderView"):
+        super().__init__(title="Embed Color")
+        self.view = view
+        cur = view.embed.color
+        default_hex = hex(cur.value)[2:].zfill(6) if cur and cur.value else "89b4fa"
+        self.inp = discord.ui.TextInput(
+            label="Color (hex, no #)",
+            placeholder="89b4fa",
+            max_length=6,
+            min_length=6,
+            default=default_hex,
+        )
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        raw = self.inp.value.strip()
+        try:
+            self.view.embed.color = discord.Color(int(raw, 16))
+        except ValueError:
+            await interaction.response.send_message(
+                "Invalid hex color. Use 6 hex digits (e.g. `89b4fa`).",
+                ephemeral=True,
+            )
+            return
+        await self.view.refresh(interaction)
+
+
+class _ImageModal(discord.ui.Modal):
+    def __init__(self, view: "EmbedBuilderView"):
+        super().__init__(title="Embed Image")
+        self.view = view
+        cur = view.embed.image
+        self.inp = discord.ui.TextInput(
+            label="Image URL",
+            placeholder="https://example.com/image.png",
+            required=False,
+            default=cur.url if cur and cur.url else "",
+        )
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        val = self.inp.value.strip()
+        if val:
+            self.view.embed.set_image(url=val)
+        else:
+            self.view.embed.set_image(url=None)
+        await self.view.refresh(interaction)
+
+
+class _ThumbnailModal(discord.ui.Modal):
+    def __init__(self, view: "EmbedBuilderView"):
+        super().__init__(title="Embed Thumbnail")
+        self.view = view
+        cur = view.embed.thumbnail
+        self.inp = discord.ui.TextInput(
+            label="Thumbnail URL",
+            placeholder="https://example.com/thumb.png",
+            required=False,
+            default=cur.url if cur and cur.url else "",
+        )
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        val = self.inp.value.strip()
+        if val:
+            self.view.embed.set_thumbnail(url=val)
+        else:
+            self.view.embed.set_thumbnail(url=None)
+        await self.view.refresh(interaction)
+
+
+class _FooterModal(discord.ui.Modal):
+    def __init__(self, view: "EmbedBuilderView"):
+        super().__init__(title="Embed Footer")
+        self.view = view
+        cur = view.embed.footer
+        self.text_inp = discord.ui.TextInput(
+            label="Footer Text",
+            placeholder="Footer text",
+            required=False,
+            max_length=2048,
+            default=cur.text or "",
+        )
+        self.icon_inp = discord.ui.TextInput(
+            label="Footer Icon URL",
+            placeholder="https://example.com/icon.png",
+            required=False,
+            default=cur.icon_url or "",
+        )
+        self.add_item(self.text_inp)
+        self.add_item(self.icon_inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        text = self.text_inp.value.strip()
+        icon = self.icon_inp.value.strip()
+        if text:
+            self.view.embed.set_footer(text=text, icon_url=icon or None)
+        else:
+            self.view.embed.remove_footer()
+        await self.view.refresh(interaction)
+
+
+class _FieldAddModal(discord.ui.Modal):
+    def __init__(self, view: "EmbedBuilderView"):
+        n = len(view.embed.fields) + 1
+        super().__init__(title=f"Add Field {n}")
+        self.view = view
+        self.name_inp = discord.ui.TextInput(
+            label=f"Field {n} Name",
+            placeholder="Field name",
+            max_length=256,
+        )
+        self.val_inp = discord.ui.TextInput(
+            label=f"Field {n} Value",
+            placeholder="Field value",
+            style=discord.TextStyle.paragraph,
+            max_length=1024,
+        )
+        self.inline_inp = discord.ui.TextInput(
+            label=f"Field {n} Inline",
+            placeholder="y / n (default y)",
+            max_length=3,
+            required=False,
+            default="y",
+        )
+        self.add_item(self.name_inp)
+        self.add_item(self.val_inp)
+        self.add_item(self.inline_inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        name = self.name_inp.value.strip()[:256] or "—"
+        val = self.val_inp.value.strip()[:1024] or "—"
+        inline = self.inline_inp.value.strip().lower() in ("y", "yes")
+        self.view.embed.add_field(name=name, value=val, inline=inline)
+        await self.view.refresh(interaction)
+
+
+class _FieldEditModal(discord.ui.Modal):
+    def __init__(self, view: "EmbedBuilderView"):
+        super().__init__(title="Edit Field")
+        self.view = view
+        self.num_inp = discord.ui.TextInput(
+            label="Field Number",
+            placeholder="1, 2, 3, ...",
+            max_length=2,
+        )
+        self.name_inp = discord.ui.TextInput(
+            label="New Name",
+            placeholder="Field name",
+            max_length=256,
+            required=False,
+        )
+        self.val_inp = discord.ui.TextInput(
+            label="New Value",
+            placeholder="Field value",
+            style=discord.TextStyle.paragraph,
+            max_length=1024,
+            required=False,
+        )
+        self.inline_inp = discord.ui.TextInput(
+            label="Inline",
+            placeholder="y / n (leave blank to keep)",
+            max_length=3,
+            required=False,
+        )
+        self.add_item(self.num_inp)
+        self.add_item(self.name_inp)
+        self.add_item(self.val_inp)
+        self.add_item(self.inline_inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        fields = self.view.embed.fields
+        try:
+            idx = int(self.num_inp.value.strip()) - 1
+            if idx < 0 or idx >= len(fields):
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message(
+                f"Invalid field number. There are {len(fields)} fields.",
+                ephemeral=True,
+            )
+            return
+
+        name = self.name_inp.value.strip()
+        val = self.val_inp.value.strip()
+        inline = self.inline_inp.value.strip().lower()
+
+        old = fields[idx]
+        new_name = name[:256] if name else old.name
+        new_val = val[:1024] if val else old.value
+        new_inline = inline in ("y", "yes") if inline else old.inline
+
+        self.view.embed.set_field_at(idx, name=new_name, value=new_val, inline=new_inline)
+        await self.view.refresh(interaction)
+
+
+class _FieldDeleteModal(discord.ui.Modal):
+    def __init__(self, view: "EmbedBuilderView"):
+        super().__init__(title="Delete Field")
+        self.view = view
+        self.num_inp = discord.ui.TextInput(
+            label="Field Number to Delete",
+            placeholder="1, 2, 3, ...",
+            max_length=2,
+        )
+        self.add_item(self.num_inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        fields = self.view.embed.fields
+        try:
+            idx = int(self.num_inp.value.strip()) - 1
+            if idx < 0 or idx >= len(fields):
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message(
+                f"Invalid field number. There are {len(fields)} fields.",
+                ephemeral=True,
+            )
+            return
+        self.view.embed.remove_field(idx)
+        await self.view.refresh(interaction)
+
+
+class _SendToModal(discord.ui.Modal):
+    def __init__(self, view: "EmbedBuilderView"):
+        super().__init__(title="Send to Channel")
+        self.view = view
+        self.channel_inp = discord.ui.TextInput(
+            label="Channel ID",
+            placeholder="Paste the channel ID",
+            max_length=20,
+        )
+        self.add_item(self.channel_inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            cid = int(self.channel_inp.value.strip())
+        except ValueError:
+            await interaction.response.send_message("Invalid channel ID.", ephemeral=True)
+            return
+        channel = interaction.guild.get_channel(cid)
+        if channel is None:
+            await interaction.response.send_message("Channel not found.", ephemeral=True)
+            return
+        await channel.send(embed=self.view.embed)
+        await interaction.response.send_message(
+            f"Embed sent to {channel.mention}.", ephemeral=True
+        )
+
+
+class EmbedBuilderView(discord.ui.View):
+    def __init__(self, embed: discord.Embed, user_id: int):
+        super().__init__(timeout=600)
+        self.embed = embed
+        self.user_id = user_id
+
+    async def refresh(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(embed=self.embed, view=self)
+
+    # --- Select: choose an embed part to edit ---
+
+    @discord.ui.select(
+        placeholder="Choose an embed part…",
+        options=[
+            discord.SelectOption(label="Author", value="author", description="Author name + icon"),
+            discord.SelectOption(label="Title", value="title", description="Set the embed title"),
+            discord.SelectOption(label="Description", value="description", description="Set the description"),
+            discord.SelectOption(label="Color", value="color", description="Change embed color (hex)"),
+            discord.SelectOption(label="Image", value="image", description="Large embed image"),
+            discord.SelectOption(label="Thumbnail", value="thumbnail", description="Top-right thumbnail"),
+            discord.SelectOption(label="Footer", value="footer", description="Footer text + icon"),
+            discord.SelectOption(label="Add Field", value="add_field", description="Add a new field"),
+        ],
+    )
+    async def part_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if interaction.user.id != self.user_id:
+            return
+        val = select.values[0]
+        modals = {
+            "author": _AuthorModal,
+            "title": _TitleModal,
+            "description": _DescriptionModal,
+            "color": _ColorModal,
+            "image": _ImageModal,
+            "thumbnail": _ThumbnailModal,
+            "footer": _FooterModal,
+            "add_field": _FieldAddModal,
+        }
+        modal_cls = modals.get(val)
+        if modal_cls:
+            await interaction.response.send_modal(modal_cls(self))
+
+    # --- Buttons ---
+
+    @discord.ui.button(label="Edit Field", style=discord.ButtonStyle.secondary)
+    async def edit_field(self, interaction: discord.Interaction, btn: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return
+        await interaction.response.send_modal(_FieldEditModal(self))
+
+    @discord.ui.button(label="Delete Field", style=discord.ButtonStyle.danger)
+    async def delete_field(self, interaction: discord.Interaction, btn: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return
+        await interaction.response.send_modal(_FieldDeleteModal(self))
+
+    @discord.ui.button(label="Send Here", style=discord.ButtonStyle.success, row=2)
+    async def send_here(self, interaction: discord.Interaction, btn: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return
+        await interaction.channel.send(embed=self.embed)
+        await interaction.response.send_message("Embed sent!", ephemeral=True)
+
+    @discord.ui.button(label="Send To…", style=discord.ButtonStyle.secondary, row=2)
+    async def send_to(self, interaction: discord.Interaction, btn: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return
+        await interaction.response.send_modal(_SendToModal(self))
+
+
 class UtilityCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="embed", description="Make an embed. (Manage messages required)")
+    @app_commands.command(name="embed", description="Build an embed with a visual editor. (Manage messages required)")
     @app_commands.checks.cooldown(1, 60, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_messages=True)
-    # @app_commands.describe(title = "Title of the embed", description = "Description of the embed", color = "Color of side part of embed in rgb code ex: (0,0,0) without the parentheses", image="Largest media in embed in url", thumbnail="Smaller image usually located at top right in url")
-    async def embed(self, interaction: discord.Interaction, title: str, description: Optional[str], color: Optional[str], image: Optional[str], thumbnail: Optional[str], footer: Optional[str]):
-      if color == None:
-        color = "255,255,255"
-      color_list = color.split(",")
-      r = int(color_list[0])
-      g = int(color_list[1])
-      b = int(color_list[2])
-      embed_2 = discord.Embed()
-      if description == None:
-        embed = discord.Embed(title=title, color=discord.Color.from_rgb(r, g, b))
-      else:
-        embed = discord.Embed(title=title, description=description, color=discord.Color.from_rgb(r, g, b))
-      if image != None:
-        embed.set_image(url=image)
-      if thumbnail != None:
-        embed.set_thumbnail(url=thumbnail)
-      if footer == None:
-        footer = f"Embed created by {interaction.user} | 🤍 Equinox Embeds"
-      embed.set_footer(text=footer)
-      await interaction.response.defer()
-      await interaction.followup.send(file=discord.File("assets/embed_guide.png"), content="Embed's guide", ephemeral=True)
-      msg_1 = await interaction.channel.send(f"{interaction.user.mention} How many fields does your embed need? (Answer in number, if not needed say 0)")
-      msg_2 = await self.bot.wait_for('message', check=lambda message: message.author == interaction.user)
-      if int(msg_2.content) > 0:
-        if msg_2 != None:
-          await msg_2.delete()
-          await msg_1.delete()
-        for i in range(int(msg_2.content)):
-          field_title = await interaction.channel.send(f"{interaction.user.mention} What is the content of the No: {i+1} field's title?")
-          input_field_title = await self.bot.wait_for('message', check=lambda message: message.author == interaction.user)
-          if input_field_title != None:
-            await input_field_title.delete()
-            await field_title.delete()
-          field_description = await interaction.channel.send(f"{interaction.user.mention} What is the content of the No: {i+1} field's description?")
-          input_field_description = await self.bot.wait_for('message', check=lambda message: message.author == interaction.user)
-          if input_field_description != None:
-            await input_field_description.delete()
-            await field_description.delete()
-          field_inline = await interaction.channel.send(f"{interaction.user.mention} No: {i+1} Field inline? (y/n) (if inline = y, then fields will be in row, if inline = n, then fields will stack on each other)")
-          input_field_inline = await self.bot.wait_for('message', check=lambda message: message.author == interaction.user)
-          if input_field_inline != None:
-            await input_field_inline.delete()
-            await field_inline.delete()
-            if input_field_inline.content.lower() == "y":
-              embed.add_field(name=input_field_title.content, value=input_field_description.content, inline=True)
-            elif input_field_inline.content.lower() == "n":
-              embed.add_field(name=input_field_title.content, value=input_field_description.content, inline=False)
-      else:
-        await msg_1.delete()
-      await interaction.channel.send(embed=embed)
+    async def embed(self, interaction: discord.Interaction):
+        embed = discord.Embed(color=0x89B4FA)
+        embed.set_footer(text="Embed Builder")
+        view = EmbedBuilderView(embed, interaction.user.id)
+        await interaction.response.send_message(
+            "Use the dropdown and buttons below to build your embed. Changes update live.",
+            embed=embed,
+            view=view,
+            ephemeral=True,
+        )
     
 
     @app_commands.command(name="purge", description="Clear messages. (Manage messages required)")
