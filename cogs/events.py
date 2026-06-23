@@ -15,10 +15,17 @@ class EventsCog(commands.Cog):
     async def on_ready(self):
         from state import ReactionRoleView, ScamFeedbackView, client, char1, read_json, write_json, load_data, init_db_pool
         await init_db_pool(min_size=1, max_size=5)
-        await self.bot.change_presence(
-            status=discord.Status.idle,
-            activity=discord.Activity(type=discord.ActivityType.listening, name="/help me!")
-        )
+        is_dev = os.getenv("ENV") != "production"
+        if is_dev:
+            await self.bot.change_presence(
+                status=discord.Status.online,
+                activity=discord.Activity(type=discord.ActivityType.playing, name="🛠️ Updating...")
+            )
+        else:
+            await self.bot.change_presence(
+                status=discord.Status.idle,
+                activity=discord.Activity(type=discord.ActivityType.listening, name="/help me!")
+            )
         if ScamFeedbackView:
             self.bot.add_view(ScamFeedbackView(action_id="dummy"))
 

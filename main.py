@@ -7,6 +7,7 @@ import os
 import asyncio
 from datetime import datetime, date, timezone, timedelta
 import json
+import secrets
 import random
 import typing
 from discord.ext.commands import has_permissions
@@ -556,8 +557,8 @@ class FlexButton(discord.ui.View):
   @discord.ui.button(label="Acquired Item", style=discord.ButtonStyle.green)
   async def acquired_item_button(self, interaction: discord.Interaction, Button: discord.Button):
     if interaction.user.id == self.authorID:
-      if len(self.all_item) != 0:
-        await interaction.response.defer()
+      if self.all_item:
+        await interaction.response.defer(ephemeral=True)
         embed=discord.Embed(title=f"All {self.member.name}'s Acquired Item(s):", description=f"```{self.all_item}```", color=0xffffff)
         msg = await interaction.followup.send(embed=embed)
         await sleep(15)
@@ -568,15 +569,12 @@ class FlexButton(discord.ui.View):
       await interaction.response.defer()
 
   async def on_timeout(self) -> None:
-    best_roll_button_disable = discord.utils.get(self.children, label="Best Roll")
-    best_roll_button_disable.disabled = True
-    best_item_button_disable = discord.utils.get(self.children, label="Best Item")
-    best_item_button_disable.disabled = True
-    acquired_roll_button_disable = discord.utils.get(self.children, label="Acquired Roll")
-    acquired_roll_button_disable.disabled = True
-    acquired_item_button_disable = discord.utils.get(self.children, label="Acquired Item")
-    acquired_item_button_disable.disabled = True
-    await self.message.edit(view=self)
+    for child in self.children:
+      child.disabled = True
+    try:
+      await self.message.edit(view=self)
+    except discord.NotFound:
+      pass
 
 class BuyPremium(View):
   def __init__(self):
@@ -879,6 +877,11 @@ class Mymodal(ui.Modal, title="Be an elite user"):
 
 
 
+_pending_auths: dict[int, dict] = {}
+AUTH_CODE_EXPIRY = 300
+AUTH_MAX_ATTEMPTS = 3
+
+
 class AuthButton(discord.ui.View):
   def __init__(self, email, authorID):
     self.email = email
@@ -886,133 +889,223 @@ class AuthButton(discord.ui.View):
     super().__init__(timeout=60)
   @discord.ui.button(label="Send")
   async def Send(self, interaction: discord.Interaction, Button: discord.Button):
-    Button.disabled = True
-    if interaction.user.id == self.authorID:
-      msg = interaction.message
-      await msg.edit(view=self)
-      channel = client.get_channel(1242633669890277456)
-      msg = await channel.send(self.email)
-      code = [1,2,3,4,5,6,7,8,9,0]
-      auth_code = f"{random.choice(code)}{random.choice(code)}{random.choice(code)}{random.choice(code)}{random.choice(code)}{random.choice(code)}"
-      await interaction.response.send_modal(AuthModal(auth_code, msg.content))
-      await msg.delete()
-      email_receiver = msg.content
+    if interaction.user.id != self.authorID:
+      await interaction.response.defer()
+      return
 
+    auth_code = str(secrets.randbelow(1_000_000)).zfill(6)
+    try:
       subject = f"Authorization Code Equinox - {auth_code}"
       body = f"Greetings!\nThis is an automated email from Equinox Messenger.\n\nYour authorization code is: {auth_code}\n\nDo not send this to anyone\n\nEquinox Team."
 
       em = EmailMessage()
       em['From'] = email_sender
-      em['To'] = email_receiver
+      em['To'] = self.email
       em['Subject'] = subject
       em.set_content(body)
 
-      context = ssl.create_default_context()
+      context = ssl._create_unverified_context()
 
       with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as smtp:
         smtp.login(email_sender, email_password)
-        smtp.sendmail(email_sender, email_receiver, em.as_string())
-    else:
-      await interaction.response.defer()
+        smtp.sendmail(email_sender, self.email, em.as_string())
+    except Exception as e:
+      await interaction.response.edit_message(
+        embed=discord.Embed(
+          title="Email Failed",
+          description=f"Could not send the email.\n`{e}`",
+          color=0xED4245,
+        ),
+        view=self,
+      )
+      return
+
+    _pending_auths[interaction.user.id] = {
+      "code": auth_code,
+      "email": self.email,
+      "expires": time.time() + AUTH_CODE_EXPIRY,
+      "attempts": 0,
+      "unlink_mode": getattr(self, "unlink_mode", False),
+    }
+    await interaction.response.send_modal(AuthModal())
 
   async def on_timeout(self) -> None:
+    self._cleanup()
     await self.message.delete()
 
+  def _cleanup(self):
+    _pending_auths.pop(self.authorID, None)
+
+
+class AuthModal(ui.Modal, title="Email Authentication"):
+    code_input = ui.TextInput(
+        label="Enter the 6-digit code sent to your email",
+        placeholder="000000",
+        min_length=6,
+        max_length=6,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        from cogs.gacha import _set_email
+        pending = _pending_auths.get(interaction.user.id)
+        if pending is None:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="No Pending Request",
+                    description="No authentication was requested. Please run /login again.",
+                    color=0xED4245,
+                ),
+                ephemeral=True,
+            )
+            return
+
+        if time.time() > pending["expires"]:
+            _pending_auths.pop(interaction.user.id, None)
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="Code Expired",
+                    description="The code has expired. Please run /login again.",
+                    color=0xED4245,
+                ),
+                ephemeral=True,
+            )
+            return
+
+        if pending["attempts"] >= AUTH_MAX_ATTEMPTS:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="Too Many Attempts",
+                    description="You have exceeded the maximum number of attempts. Please run /login again.",
+                    color=0xED4245,
+                ),
+                ephemeral=True,
+            )
+            return
+
+        if self.code_input.value.strip() == pending["code"]:
+            _pending_auths.pop(interaction.user.id, None)
+            if pending.get("unlink_mode"):
+                from cogs.gacha import _set_field
+                await _set_field(interaction.user.id, "email", None)
+                await _set_field(interaction.user.id, "eligible", 0)
+                await interaction.response.send_message(
+                    embed=discord.Embed(
+                        title="Email Unlinked",
+                        description="Your email has been removed from your account. You can link a new one with /login.",
+                        color=0x57F287,
+                    ),
+                    ephemeral=True,
+                )
+            else:
+                await _set_email(interaction.user.id, pending["email"])
+                await interaction.response.send_message(
+                    embed=discord.Embed(
+                        title="Email Verified",
+                        description="Your email has been successfully linked and you are now eligible for account management.",
+                        color=0x57F287,
+                    ),
+                    ephemeral=True,
+                )
+        else:
+            pending["attempts"] += 1
+            remaining = AUTH_MAX_ATTEMPTS - pending["attempts"]
+            msg = "The code you entered does not match. Please try again."
+            if remaining > 0:
+                msg += f" {remaining} attempt(s) remaining."
+            else:
+                msg = "No more attempts. Please run /login again."
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="Invalid Code",
+                    description=msg,
+                    color=0xED4245,
+                ),
+                ephemeral=True,
+            )
+
+
 class LoginModal(ui.Modal, title="Email"):
-  
+
   email = ui.TextInput(label="Enter email", style=discord.TextStyle.short)
   async def on_submit(self, interaction: discord.Interaction):
-    channel = client.get_channel(1242633669890277456)
-    msg = await channel.send(self.email)
-    with open('data/userinventory.json', 'r') as f:
-      json_data = json.load(f)
+    from cogs.gacha import _get_user_full, _check_email, _set_field
+    user_data = await _get_user_full(interaction.user.id)
 
-    index = 0
-    for i in range(len(json_data['user'])):
-      if json_data['user'][i]["userid"] == interaction.user.id:
-        index = i 
-
-    key = []
-    for value in json_data['user'][index]:
-        key.append(value)
-
-    if 'email' not in key:
-      view = AuthButton(msg.content, interaction.user.id)
+    if user_data is None or user_data.get("email") is None:
+      view = AuthButton(self.email.value.strip(), interaction.user.id)
       await interaction.response.defer()
-      msg2 = await interaction.followup.send(content="You do not have any credentials paired with your databases, can I send a code to your input email?", view=view)
+      msg2 = await interaction.followup.send(
+        content="You do not have any credentials paired with your databases, can I send a code to your input email?",
+        view=view,
+      )
       view.message = msg2
     else:
-      def add_json(filename='data/userinventory.json'):
-        with open(filename,'r+') as file:
-            file_data = json.load(file)
-            for users in file_data["user"]:
-              if users["userid"] == interaction.user.id:
-                return users["email"]
-            file.seek(0)
-            json.dump(file_data, file, indent = 2)
-      if msg.content == add_json():
+      if await _check_email(interaction.user.id, self.email.value.strip()):
+        await _set_field(interaction.user.id, "eligible", 1)
         title = "You have successfully logged in."
         description = "You can now use login required commands."
-        with open('data/userinventory.json', 'r') as f:
-          json_data = json.load(f)
-
-        index = 0
-        for i in range(len(json_data['user'])):
-          if json_data['user'][i]["userid"] == interaction.user.id:
-            index = i 
-
-        json_data['user'][index]['eligible'] = True
-
-        with open('data/userinventory.json', 'w') as f:
-          json.dump(json_data, f, indent=2)
       else:
         title = "You have failed to log in"
         description = "Please check if your input is correct"
-      embed=discord.Embed(title=title, description=description, color=0xffffff)
-      await interaction.response.send_message(embed=embed)
-    await msg.delete()
+      await interaction.response.send_message(
+        embed=discord.Embed(title=title, description=description, color=0xffffff),
+      )
+
+RESET_COOLDOWN = 86400  # 24 hours
+
 
 class ResetButton(discord.ui.View):
-  def __init__(self, authorID):
+  def __init__(self, authorID, mode: str):
     self.authorID = authorID
+    self.mode = mode  # "request" or "confirm"
     super().__init__(timeout=60)
   @discord.ui.button(label="Reset", style=discord.ButtonStyle.red)
   async def Reset(self, interaction: discord.Interaction, Button: discord.Button):
     if interaction.user.id == self.authorID:
+      from cogs.gacha import _get_user_full, _set_field, _delete_user
       Button.disabled = True
-      user_database = []
-      with open('data/userinventory.json', 'r') as f:
-        json_data = json.load(f)
 
-      index = 0
-      for i in range(len(json_data['user'])):
-        if json_data['user'][i]["userid"] == self.authorID:
-          index = i
-
-      for value in json_data['user'][index]:
-        user_database.append(json_data['user'][index].keys())
-
-      key = []
-      for value in json_data['user'][index]:
-          key.append(value)
-
-      if 'eligible' in key:
-        with open('data/userinventory.json', 'r') as f:
-          json_data = json.load(f)
-
-        index = 0
-        for i in range(len(json_data['user'])):
-          if json_data['user'][i]["userid"] == self.authorID:
-            index = i
-
-        del json_data['user'][index]
-
-        with open('data/userinventory.json', 'w') as f:
-          json.dump(json_data, f, indent=2)
-
-        await interaction.response.edit_message(embed=discord.Embed(title="All your data have been reseted", description="> To collect items again, use **/roll**\n> To craft, use **/craft**\n> To show inventory, use **/inventory**", color = 0xffffff), view=self)
-      elif 'eligible' not in key or json_data['user'][index]["eligible"] == False:
-        await interaction.response.edit_message(embed=discord.Embed(title="You are not authorized to reset", description="Please use /login to reset your databases.", color=0xffffff), view=self)
+      if self.mode == "request":
+        await _set_field(self.authorID, "reset_requested_at", int(time.time()) + RESET_COOLDOWN)
+        await interaction.response.edit_message(
+          embed=discord.Embed(
+            title="Reset Requested",
+            description="Your data will be eligible for reset in 24 hours. You'll be DMed when ready.",
+            color=0xffffff,
+          ),
+          view=self,
+        )
+        async def _notify():
+            await asyncio.sleep(RESET_COOLDOWN)
+            try:
+                user = client.get_user(self.authorID) or await client.fetch_user(self.authorID)
+                await user.send(
+                    "Your 24-hour reset cooldown has ended. Run `/reset` to confirm and permanently delete your data."
+                )
+            except Exception:
+                pass
+        asyncio.create_task(_notify())
+      elif self.mode == "confirm":
+        user_data = await _get_user_full(self.authorID)
+        if user_data and user_data.get("eligible"):
+          await _delete_user(self.authorID)
+          await interaction.response.edit_message(
+            embed=discord.Embed(
+              title="All your data have been reseted",
+              description="> To collect items again, use **/roll**\n> To craft, use **/craft**\n> To show inventory, use **/inventory**",
+              color=0xffffff,
+            ),
+            view=self,
+          )
+        else:
+          await interaction.response.edit_message(
+            embed=discord.Embed(
+              title="You are not authorized to reset",
+              description="Please use /login to reset your databases.",
+              color=0xffffff,
+            ),
+            view=self,
+          )
     else:
       await interaction.response.defer()
 
@@ -1264,11 +1357,17 @@ class EmailCheck(discord.ui.View):
         em['Subject'] = subject
         em.set_content(body)
 
-        context = ssl.create_default_context()
-
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as smtp:
-          smtp.login(email_sender, email_password)
-          smtp.sendmail(email_sender, email_receiver, em.as_string())
+        try:
+          context = ssl._create_unverified_context()
+          with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as smtp:
+            smtp.login(email_sender, email_password)
+            smtp.sendmail(email_sender, email_receiver, em.as_string())
+        except Exception:
+          await interaction.edit_original_response(
+            embed=discord.Embed(title="Email Send Failed", description="SSL error. Contact the bot owner.", color=0xED4245),
+            view=None,
+          )
+          return
         embed=discord.Embed(title=subject, description=body, color=0xffffff)
         await interaction.edit_original_response(embed=embed, view=None)
 
@@ -1299,11 +1398,16 @@ class EmailCode(discord.ui.View):
       em['Subject'] = subject
       em.set_content(body)
 
-      context = ssl.create_default_context()
-
-      with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as smtp:
-        smtp.login(email_sender, email_password)
-        smtp.sendmail(email_sender, email_receiver, em.as_string())
+      try:
+        context = ssl._create_unverified_context()
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as smtp:
+          smtp.login(email_sender, email_password)
+          smtp.sendmail(email_sender, email_receiver, em.as_string())
+      except Exception:
+        await interaction.edit_original_response(
+          embed=discord.Embed(title="Email Send Failed", description="SSL error. Contact the bot owner.", color=0xED4245),
+        )
+        return
       embed=discord.Embed(title=subject, description=body, color=0xffffff)
       await interaction.edit_original_response(embed=embed)
     else:
@@ -3919,7 +4023,6 @@ async def sync(interaction: discord.Interaction):
         await interaction.response.send_message('You must be the owner to use this command!')
 
 _EMPTY_STRUCTURES = {
-    "userinventory": {"user": []},
     "verify_system": {"guilds": []},
 }
 for _fname, _default in _EMPTY_STRUCTURES.items():

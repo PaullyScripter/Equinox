@@ -4,7 +4,7 @@ from discord.ext import commands
 from discord.ui import View, Button, Modal, TextInput, Select
 from typing import Optional
 from datetime import datetime, timezone, timedelta
-import json, random, asyncio, re, math, io, os
+import json, random, asyncio, re, math, io, os, time
 import aiohttp
 import string
 import uuid
@@ -25,37 +25,150 @@ class PremiumCog(commands.Cog):
     @app_commands.checks.cooldown(1, 30, key=lambda i: (i.user.id))
     async def login(self, interaction: discord.Interaction):
       from state import LoginModal
-      with open("data/userinventory.json") as f:
-        users = json.load(f)
-      userid_list = []
-      for user in users["user"]:
-        userid_list.append(user["userid"])
-      if interaction.user.id not in userid_list:
-        def add_json(new_data, filename='data/userinventory.json'):
-          with open(filename,'r+') as file:
-              file_data = json.load(file)
-              file_data["user"].append(new_data)
-              file.seek(0)
-              json.dump(file_data, file, indent = 2)
-
-        y = {
-          "userid": interaction.user.id,
-          "inventory": [
-            {}
-          ]
-        }
-        add_json(y)
+      from cogs.gacha import _ensure_user
+      await _ensure_user(interaction.user.id)
       await interaction.response.send_modal(LoginModal())
 
 
-    @app_commands.command(name="reset", description="Resets your databases")
+    @app_commands.command(name="reset", description="Resets your databases (24h cooldown)")
     @app_commands.checks.cooldown(1, 60, key=lambda i: (i.user.id))
     async def reset(self, interaction: discord.Interaction):
         from state import ResetButton
-        embed=discord.Embed(title="Are you sure with resetting all your data?\nThis includes your rolls, items, credentials, and stats.\nIgnore this to cancel", color=0xffffff)
-        view = ResetButton(interaction.user.id)
-        await interaction.response.defer()
-        msg = await interaction.followup.send(embed=embed, view=view)
+        from cogs.gacha import _get_user_full, _set_field
+
+        data = await _get_user_full(interaction.user.id)
+        reset_at = data.get("reset_requested_at") if data else None
+        now = time.time()
+
+        if reset_at is None or reset_at == 0:
+            embed = discord.Embed(
+                title="Are you sure with resetting all your data?",
+                description="This includes your rolls, items, credentials, and stats.\nClick Reset to start a 24-hour cooldown. After that, run `/reset` again to confirm.",
+                color=0xffffff,
+            )
+            view = ResetButton(interaction.user.id, "request")
+            await interaction.response.defer()
+            msg = await interaction.followup.send(embed=embed, view=view)
+            view.message = msg
+        elif reset_at > now:
+            remaining = int(reset_at - now)
+            hrs = remaining // 3600
+            mins = (remaining % 3600) // 60
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="Reset in Progress",
+                    description=f"Reset will be available in **{hrs}h {mins}m**. Come back later.",
+                    color=0xffffff,
+                ),
+            )
+        else:
+            embed = discord.Embed(
+                title="Reset Ready",
+                description="The 24-hour cooldown has passed. Click Reset to permanently delete your data.",
+                color=0xED4245,
+            )
+            view = ResetButton(interaction.user.id, "confirm")
+            await interaction.response.defer()
+            msg = await interaction.followup.send(embed=embed, view=view)
+            view.message = msg
+
+
+
+    @app_commands.command(name="account", description="View your account status")
+    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
+    async def account(self, interaction: discord.Interaction):
+        from cogs.gacha import _get_user_full
+        data = await _get_user_full(interaction.user.id)
+        if data is None:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="No Account Found",
+                    description="You don't have any data yet. Use /roll to get started.",
+                    color=0xffffff,
+                ),
+            )
+            return
+
+        email_hash = data.get("email")
+        eligible = data.get("eligible")
+        reset_at = data.get("reset_requested_at")
+
+        embed = discord.Embed(
+            title=f"{interaction.user.name}'s Account",
+            color=0xffffff,
+        )
+
+        if email_hash:
+            embed.add_field(name="Email", value=f"Linked (SHA-256: `{email_hash[:12]}...`)", inline=False)
+        else:
+            embed.add_field(name="Email", value="Not linked", inline=False)
+
+        embed.add_field(name="Eligible for Reset", value="Yes" if eligible else "No", inline=True)
+        embed.add_field(name="Rolls", value=str(data.get("roll_count", 0)), inline=True)
+
+        if reset_at and reset_at > time.time():
+            remaining = int(reset_at - time.time())
+            hrs = remaining // 3600
+            mins = (remaining % 3600) // 60
+            embed.add_field(name="Reset Available In", value=f"{hrs}h {mins}m", inline=True)
+
+        embed.set_footer(text="Emails are stored as SHA-256 hashes for privacy.")
+        await interaction.response.send_message(embed=embed)
+
+
+    @app_commands.command(name="unlink", description="Unlink your email from the bot")
+    @app_commands.checks.cooldown(1, 30, key=lambda i: (i.user.id))
+    async def unlink(self, interaction: discord.Interaction):
+        from cogs.gacha import _get_user_full, _hash_email
+
+        data = await _get_user_full(interaction.user.id)
+        if data is None or data.get("email") is None:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="No Email Linked",
+                    description="You don't have an email linked to your account.",
+                    color=0xffffff,
+                ),
+            )
+            return
+
+        stored_hash = data["email"]
+        await interaction.response.send_modal(UnlinkModal(stored_hash, interaction.user.id))
+
+
+
+class UnlinkModal(Modal, title="Unlink Email"):
+    def __init__(self, stored_hash: str, userid: int):
+        super().__init__()
+        self.stored_hash = stored_hash
+        self.userid = userid
+        self.email_input = TextInput(
+            label="Enter the email linked to your account",
+            placeholder="you@example.com",
+        )
+        self.add_item(self.email_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        from cogs.gacha import _hash_email
+        from state import AuthButton
+
+        if _hash_email(self.email_input.value) != self.stored_hash:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="Email Mismatch",
+                    description="The email you entered doesn't match the one on your account.",
+                    color=0xED4245,
+                ),
+            )
+            return
+
+        email = self.email_input.value.strip()
+        view = AuthButton(email, interaction.user.id)
+        view.unlink_mode = True
+        msg = await interaction.response.send_message(
+            content="A verification code will be sent to your email. Confirm to proceed with unlinking.",
+            view=view,
+        )
         view.message = msg
 
 
