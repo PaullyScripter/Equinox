@@ -3,8 +3,10 @@ from discord import app_commands
 from discord.ext import commands
 from typing import Optional
 from collections import OrderedDict
-import random, asyncio, math, sqlite3, json, os, hashlib
+import random, asyncio, math, sqlite3, json, os, hashlib, logging
 from asyncio import sleep
+
+log = logging.getLogger("gacha")
 
 
 # ── Constants ──
@@ -446,8 +448,8 @@ class GachaCog(commands.Cog):
             active, tier, expires = await is_premium(interaction.user.id)
             if active:
                 luck = 2
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning("is_premium check failed in roll: %s", exc)
 
         rarity_priority: list[int] = []
         probability = 1
@@ -673,8 +675,8 @@ class GachaCog(commands.Cog):
         active = False
         try:
             active, tier, expires = await is_premium(interaction.user.id)
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning("is_premium check failed in daily: %s", exc)
 
         if not active:
             await interaction.response.send_message(
