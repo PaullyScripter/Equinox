@@ -13,6 +13,13 @@ from email.message import EmailMessage
 import aiohttp
 import googletrans
 from googletrans import Translator
+
+
+def _email_ssl_context():
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
 import wikipedia
 import numpy
 import matplotlib.pyplot as plt
@@ -27,6 +34,7 @@ from PIL import Image
 import requests
 
 import state
+import cogs.database as db
 
 DEV_USER_ID = [857932717681147954]
 
@@ -34,29 +42,15 @@ email_sender = os.getenv("email_sender")
 email_password = os.getenv("email_password")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-VERIFYING_USERS_PATH = "data/user_verifying.json"
-
 def load_verifying_users() -> set[tuple[int, int]]:
-    if not os.path.exists(VERIFYING_USERS_PATH):
-        return set()
-    try:
-        with open(VERIFYING_USERS_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        result = set()
-        for entry in data.get("users", []):
-            if isinstance(entry, list) and len(entry) == 2:
-                result.add((int(entry[0]), int(entry[1])))
-            else:
-                result.add((0, int(entry)))
-        return result
-    except Exception:
-        return set()
+    return db.load_verifying_users()
+
 
 def save_verifying_users(data: set[tuple[int, int]]):
-    with open(VERIFYING_USERS_PATH, "w", encoding="utf-8") as f:
-        json.dump({"users": [list(pair) for pair in data]}, f, indent=2)
+    db.save_verifying_users(data)
 
-VERIFYING_USERS: set[tuple[int, int]] = load_verifying_users()
+
+VERIFYING_USERS: set[tuple[int, int]] = db.load_verifying_users()
 
 _pending_auths: dict[int, dict] = {}
 AUTH_CODE_EXPIRY = 300
@@ -525,9 +519,7 @@ class AuthButton(discord.ui.View):
             em['Subject'] = subject
             em.set_content(body)
 
-            context = ssl.create_default_context()
-
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as smtp:
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=_email_ssl_context()) as smtp:
                 smtp.login(email_sender, email_password)
                 smtp.sendmail(email_sender, self.email, em.as_string())
         except Exception as e:
@@ -855,12 +847,9 @@ class VerifyButton(discord.ui.View):
         super().__init__(timeout=None)
     @discord.ui.button(label="Start the verify progress", style=discord.ButtonStyle.green, custom_id="verifybutton")
     async def verifybutton(self, interaction: discord.Interaction, Button: discord.Button):
-        with open(f'data/verify_system.json', 'r') as f:
-            guild_data = json.load(f)
+        config = db.get_verify_config(interaction.guild.id)
 
-        guild_ids = {g['guildid'] for g in guild_data.get('guilds', [])}
-
-        if interaction.guild.id not in guild_ids:
+        if config is None:
             await interaction.response.defer()
             await interaction.followup.send("This verify system is outdated and or removed, please contact server owner/admins.", ephemeral=True)
             return
@@ -873,19 +862,13 @@ class VerifyButton(discord.ui.View):
             await interaction.followup.send("You already have an ongoing verification in this server. Finish it first.", ephemeral=True)
             return
 
-        index = 0
-        for i, g in enumerate(guild_data['guilds']):
-            if g['guildid'] == gid:
-                index = i
-                break
-
         captcha_code, captcha_image = generate_captcha()
         file = discord.File(captcha_image, filename="captcha.png")
 
         embed=discord.Embed(title="Enter the 8 digits show above to verify.", color=0xffffff)
         embed.add_field(name="Your Code:", value="```Code:```", inline=False)
         embed.set_footer(text=f"Verifying {interaction.user.name}...", icon_url=interaction.user.avatar.url)
-        view = NumbersButton(gid, uid, guild_data['guilds'][index]['remove_role'], guild_data['guilds'][index]['add_role'], captcha_code)
+        view = NumbersButton(gid, uid, config['remove_role'], config['add_role'], captcha_code)
         await interaction.response.defer()
         msg = await interaction.followup.send(interaction.user.mention, embed=embed, view=view, file=file)
         view.message = msg
@@ -898,16 +881,7 @@ class DeleteVerifySystem(discord.ui.View):
     @discord.ui.button(label="Delete Verify System (owner only)", style=discord.ButtonStyle.red)
     async def deleteverifysystem(self, interaction: discord.Interaction, Button: discord.Button):
         if interaction.user.id == interaction.guild.owner_id:
-            with open(f'data/verify_system.json', 'r') as f:
-                json_data = json.load(f)
-
-            for index in range(len(json_data['guilds'])):
-                if json_data['guilds'][index]['guildid'] == interaction.guild.id:
-                    del json_data['guilds'][index]
-
-            with open(f'data/verify_system.json', 'w') as f:
-                json.dump(json_data, f, indent=2)
-
+            db.delete_verify_config(interaction.guild.id)
             await interaction.response.send_message(embed=discord.Embed(title="Successfully deleted verify system.", color=0xffffff))
         else:
             await interaction.response.defer(ephemeral=True)
@@ -954,8 +928,7 @@ class EmailCheck(discord.ui.View):
                 em.set_content(body)
 
                 try:
-                    context = ssl.create_default_context()
-                    with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as smtp:
+                    with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=_email_ssl_context()) as smtp:
                         smtp.login(email_sender, email_password)
                         smtp.sendmail(email_sender, email_receiver, em.as_string())
                 except Exception as exc:
@@ -995,8 +968,7 @@ class EmailCode(discord.ui.View):
             em.set_content(body)
 
             try:
-                context = ssl.create_default_context()
-                with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as smtp:
+                with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=_email_ssl_context()) as smtp:
                     smtp.login(email_sender, email_password)
                     smtp.sendmail(email_sender, email_receiver, em.as_string())
             except Exception as exc:
@@ -2397,9 +2369,14 @@ class ReactionRoleDropdown(discord.ui.Select):
         await interaction.followup.send(log_message, ephemeral=True)
 
 class ScamFeedbackView(discord.ui.View):
-    def __init__(self, action_id: str):
+    def __init__(self, action_id: str = None):
         super().__init__(timeout=None)
         self.action_id = action_id
+
+    async def _disable(self, interaction: discord.Interaction):
+        for child in self.children:
+            child.disabled = True
+        await interaction.message.edit(view=self)
 
     @discord.ui.button(label="Mark as Scam", style=discord.ButtonStyle.success, custom_id="scamfb:tp")
     async def mark_scam(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -2407,13 +2384,27 @@ class ScamFeedbackView(discord.ui.View):
         payload = actions.get(self.action_id)
         if not payload:
             return await interaction.response.send_message("Action not found or expired.", ephemeral=True)
+        reasons = payload.get("reasons") or []
+        weights = state.load_pattern_weights()
+        boost_note = ""
+        changed = False
+        for r in reasons:
+            old = weights.get(r, 1.0)
+            new = min(1.0, old + 0.1)
+            if new != old:
+                weights[r] = new
+                changed = True
+                boost_note += f"\n• **{r}**: boosted from {old:.0%} → {new:.0%}"
+        if changed:
+            state.save_pattern_weights(weights)
         state.append_feedback({
             "ts": int(time.time()), "label": "true_positive",
             "guild_id": payload["guild_id"], "moderator_id": interaction.user.id,
-            "message_author_id": payload["author_id"], "reasons": payload["reasons"],
+            "message_author_id": payload["author_id"], "reasons": reasons,
             "content": payload["content"], "domains": payload.get("domains", []),
         })
-        await interaction.response.send_message(embed=state.embed_basic("Logged: Marked as Scam ✅", "Thanks!"), ephemeral=True)
+        await self._disable(interaction)
+        await interaction.response.send_message(embed=state.embed_basic("Logged: Marked as Scam ✅", f"Thanks!{boost_note}"), ephemeral=True)
 
     @discord.ui.button(label="Not a Scam", style=discord.ButtonStyle.danger, custom_id="scamfb:fp")
     async def mark_not_scam(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -2425,14 +2416,17 @@ class ScamFeedbackView(discord.ui.View):
         updated = False
         domains = payload.get("domains", []) or []
         content = payload.get("content", "") or ""
-        if cfg.get("auto_whitelist_on_false_positive", True) and domains:
+        reasons = payload.get("reasons") or []
+        brand_reasons = {"Brand Impersonation", "Impersonation Domain"}
+        has_brand = brand_reasons & set(reasons)
+        if cfg.get("auto_whitelist_on_false_positive", True) and domains and not has_brand:
             wl = set(cfg.get("domain_allowlist") or [])
             for d in domains:
                 if not d.startswith("xn--"):
                     wl.add(d.lower())
             state.update_guild_cfg(payload["guild_id"], domain_allowlist=sorted(wl))
             updated = True
-        if not domains:
+        if not domains and not has_brand:
             norm = state.normalize_phrase(content)
             phrases = set(cfg.get("phrase_allowlist") or [])
             if norm and norm not in phrases:
@@ -2445,14 +2439,23 @@ class ScamFeedbackView(discord.ui.View):
             lst.append({"by": interaction.user.id, "ts": int(time.time())})
             audit[norm] = lst
             state.update_guild_cfg(payload["guild_id"], phrase_audit=audit)
-        state.append_feedback({
+        reasons = payload.get("reasons") or []
+        degraded = state.degrade_pattern_weights(reasons)
+        feedback_entry = {
             "ts": int(time.time()), "label": "false_positive",
             "guild_id": payload["guild_id"], "moderator_id": interaction.user.id,
-            "message_author_id": payload["author_id"], "reasons": payload["reasons"],
+            "message_author_id": payload["author_id"], "reasons": reasons,
             "content": content, "domains": domains,
-        })
+        }
+        state.append_feedback(feedback_entry)
+        weights_note = ""
+        if degraded:
+            for r in reasons:
+                w = degraded.get(r, 1.0)
+                weights_note += f"\n• **{r}**: weight dropped to {w:.0%}"
+        await self._disable(interaction)
         await interaction.response.send_message(
-            embed=state.embed_basic("Logged: Not a Scam ❎", "Updated allowlist & recorded feedback." if updated else "Recorded feedback.", state.COLOR_WARN),
+            embed=state.embed_basic("Logged: Not a Scam ❎", f"Updated allowlist & recorded feedback.{weights_note}" if updated else f"Recorded feedback.{weights_note}", state.COLOR_WARN),
             ephemeral=True
         )
 

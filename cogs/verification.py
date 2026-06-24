@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 import json, random, asyncio, re, math, io, os
 from captcha.image import ImageCaptcha
 from PIL import Image
+import cogs.database as db
 
 class VerificationCog(commands.Cog):
     def __init__(self, bot):
@@ -95,12 +96,10 @@ class VerificationCog(commands.Cog):
         rev_role_id = rev_role.id if rev_role else None
         add_role_id = add_role.id if add_role else None
     
-        with open('data/verify_system.json', 'r') as f:
-            json_data = json.load(f)
-
-        existing_ids = {g['guildid'] for g in json_data.get('guilds', [])}
+        configs = db.get_verify_configs()
+        existing_ids = {g['guildid'] for g in configs}
         if interaction.guild.id in existing_ids:
-            guild = next(g for g in json_data['guilds'] if g['guildid'] == interaction.guild.id)
+            guild = next(g for g in configs if g['guildid'] == interaction.guild.id)
             embed = discord.Embed(
                 title="Error...",
                 description="```Only one verify system can be deployed per server.```",
@@ -115,16 +114,13 @@ class VerificationCog(commands.Cog):
             embed.set_image(url=image)
     
         msg = await interaction.followup.send(embed=embed, view=VerifyButton())
-        json_data['guilds'].append({
-            "guildid": interaction.guild.id,
-            "remove_role": rev_role_id,
-            "add_role": add_role_id,
-            "url": msg.jump_url,
-            "messageid": msg.id
-        })
-    
-        with open('data/verify_system.json', 'w') as f:
-            json.dump(json_data, f, indent=2)
+        db.set_verify_config(
+            interaction.guild.id,
+            remove_role=rev_role_id,
+            add_role=add_role_id,
+            url=msg.jump_url,
+            message_id=msg.id
+        )
 
 
 async def setup(bot):

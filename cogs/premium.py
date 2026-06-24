@@ -133,43 +133,43 @@ class PremiumCog(commands.Cog):
             return
 
         stored_hash = data["email"]
-        await interaction.response.send_modal(UnlinkModal(stored_hash, interaction.user.id))
+        await interaction.response.send_modal(self.UnlinkModal(stored_hash, interaction.user.id))
 
 
 
-class UnlinkModal(Modal, title="Unlink Email"):
-    def __init__(self, stored_hash: str, userid: int):
-        super().__init__()
-        self.stored_hash = stored_hash
-        self.userid = userid
-        self.email_input = TextInput(
-            label="Enter the email linked to your account",
-            placeholder="you@example.com",
-        )
-        self.add_item(self.email_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        from cogs.gacha import _hash_email
-        from state import AuthButton
-
-        if _hash_email(self.email_input.value) != self.stored_hash:
-            await interaction.response.send_message(
-                embed=discord.Embed(
-                    title="Email Mismatch",
-                    description="The email you entered doesn't match the one on your account.",
-                    color=0xED4245,
-                ),
+    class UnlinkModal(Modal, title="Unlink Email"):
+        def __init__(self, stored_hash: str, userid: int):
+            super().__init__()
+            self.stored_hash = stored_hash
+            self.userid = userid
+            self.email_input = TextInput(
+                label="Enter the email linked to your account",
+                placeholder="you@example.com",
             )
-            return
+            self.add_item(self.email_input)
 
-        email = self.email_input.value.strip()
-        view = AuthButton(email, interaction.user.id)
-        view.unlink_mode = True
-        msg = await interaction.response.send_message(
-            content="A verification code will be sent to your email. Confirm to proceed with unlinking.",
-            view=view,
-        )
-        view.message = msg
+        async def on_submit(self, interaction: discord.Interaction):
+            from cogs.gacha import _hash_email
+            from state import AuthButton
+
+            if _hash_email(self.email_input.value) != self.stored_hash:
+                await interaction.response.send_message(
+                    embed=discord.Embed(
+                        title="Email Mismatch",
+                        description="The email you entered doesn't match the one on your account.",
+                        color=0xED4245,
+                    ),
+                )
+                return
+
+            email = self.email_input.value.strip()
+            view = AuthButton(email, interaction.user.id)
+            view.unlink_mode = True
+            msg = await interaction.response.send_message(
+                content="A verification code will be sent to your email. Confirm to proceed with unlinking.",
+                view=view,
+            )
+            view.message = msg
 
 
     @app_commands.command(name="premium", description="Check your premium status")
@@ -506,13 +506,8 @@ class UnlinkModal(Modal, title="Unlink Email"):
             top_cmd, top_count = "None", 0
 
                                                 
-        ticket = 'ticket-json'
-        try:
-            with open("data/verify_system.json", encoding="utf-8") as f:
-                verify_json = json.load(f)
-            verify_count = len(verify_json.get("guilds", []))
-        except FileNotFoundError:
-            verify_count = 0
+        import cogs.database as db
+        verify_count = len(db.get_verify_configs())
 
         guild_count  = len(self.bot.guilds)
         user_count   = len(set(self.bot.get_all_members()))

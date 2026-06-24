@@ -3,6 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ext.commands import Bot
 import state
+import cogs.database as db
 import os
 import asyncio
 from datetime import datetime, date, timezone, timedelta
@@ -22,7 +23,11 @@ import math
 from discord import ui
 from discord.ui import Modal, View, Select, Button, TextInput
 import sys
+from dotenv import load_dotenv
+load_dotenv()
 from cogs.ticket_views import TicketButton, TicketChannelView, BuyPremium2
+os.makedirs("data", exist_ok=True)
+db.init_db()
 from cogs.views import *
 import PyDictionary
 from PyDictionary import PyDictionary
@@ -50,16 +55,12 @@ from typing import Dict, Any, List, Tuple, Optional, Literal
 from io import BytesIO
 import httpx
 import asyncpg
-from dotenv import load_dotenv
-load_dotenv()
 
 API_KEY = os.getenv("API_KEY")
 ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 email_password = os.getenv("email_password")
 email_sender = os.getenv("email_sender")
-
-os.makedirs("data", exist_ok=True)
 
 intents = discord.Intents.default()
 
@@ -124,11 +125,13 @@ class PersistentViewBot(commands.Bot):
         self.add_view(rrSelectGender())
         self.add_view(rrSelectPing())
         self.add_view(rrSelectServer())
-        self.add_view(PromptButtonView()) 
+        self.add_view(PromptButtonView())
+        self.add_view(ScamFeedbackView()) 
 
     async def close(self):
         from cogs.gacha import _flush_all as _gacha_flush
         await _gacha_flush()
+        db.close_db()
         await close_db_pool()
         await self.http_session.close()
         await super().close()
@@ -432,18 +435,11 @@ def _as_txt_file(filename: str, codes: list[str]) -> Optional[discord.File]:
     return discord.File(buf, filename=filename)
 
 def load_stats() -> dict:
-    if not os.path.exists(STATS_FILE):
-        return {"events": []}
-    with open(STATS_FILE, "r", encoding="utf-8") as f:
-        try:
-            return json.load(f)
-        except Exception:
-            return {"events": []}
+    return db.load_stats()
 
 
 def save_stats(data: dict) -> None:
-    with open(STATS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    db.save_stats(data)
 
 def _log_command(user_id: int, command_name: str) -> None:
     if user_id in IGNORED_USER_IDS:
@@ -455,91 +451,57 @@ def _log_command(user_id: int, command_name: str) -> None:
     events.append({
         "user_id": int(user_id),
         "command": command_name,
-        "ts": datetime.now(timezone.utc).isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     })
 
     data["events"] = events
     save_stats(data)
 
 
-AUTOPING_FOLDER = "autoping_data"
-os.makedirs(AUTOPING_FOLDER, exist_ok=True)
-
-def get_autoping_path(guild_id):
-    return os.path.join(AUTOPING_FOLDER, f"autoping_{guild_id}.json")
-
 def load_autoping_channels(guild_id):
-    path = get_autoping_path(guild_id)
-    if not os.path.exists(path):
-        return []
-    with open(path, "r") as f:
-        return json.load(f)
+    return db.load_autoping_channels(guild_id)
+
 
 def save_autoping_channels(guild_id, channels):
-    path = get_autoping_path(guild_id)
-    with open(path, "w") as f:
-        json.dump(channels, f)
-
-AUTOROLE_FOLDER = "autorole_data"
-os.makedirs(AUTOROLE_FOLDER, exist_ok=True)
-
-def get_autorole_path(guild_id):
-    return os.path.join(AUTOROLE_FOLDER, f"autorole_{guild_id}.json")
+    db.save_autoping_channels(guild_id, channels)
 
 def load_autorole(guild_id):
-    path = get_autorole_path(guild_id)
-    if not os.path.exists(path):
-        return None
-    with open(path, "r") as f:
-        return json.load(f)
+    return db.load_autorole(guild_id)
+
 
 def save_autorole(guild_id, role_id):
-    path = get_autorole_path(guild_id)
-    with open(path, "w") as f:
-        json.dump(role_id, f)
+    db.save_autorole(guild_id, role_id)
+
 
 def remove_autorole(guild_id):
-    path = get_autorole_path(guild_id)
-    if os.path.exists(path):
-        os.remove(path)
+    db.remove_autorole(guild_id)
 
 PREFIX = "/"
-
-PRIVACY_FILE = "data/privacy_settings.json"
-
-def load_privacy_settings() -> dict:
-    if not os.path.exists(PRIVACY_FILE):
-        return {}
-    try:
-        with open(PRIVACY_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, list):
-            new_data = {str(uid): ["presence", "status"] for uid in data}
-            save_privacy_settings(new_data)
-            return new_data
-        return data
-    except Exception:
-        return {}
-
-def save_privacy_settings(data: dict):
-    with open(PRIVACY_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
 
 PRIVACY_SET: set[int] = set()
 STATUS_PRIVACY_SET: set[int] = set()
 
+def load_privacy_settings() -> dict:
+    return db.load_privacy_settings()
+
+
+def save_privacy_settings(data: dict):
+    db.save_privacy_settings(data)
+
+
 def reload_privacy_sets():
     global PRIVACY_SET, STATUS_PRIVACY_SET
-    data = load_privacy_settings()
-    PRIVACY_SET = {int(uid) for uid, cats in data.items() if "presence" in cats}
-    STATUS_PRIVACY_SET = {int(uid) for uid, cats in data.items() if "status" in cats}
+    db.reload_privacy_sets()
+    PRIVACY_SET = db.PRIVACY_SET
+    STATUS_PRIVACY_SET = db.STATUS_PRIVACY_SET
+    state.PRIVACY_SET = PRIVACY_SET
+    state.STATUS_PRIVACY_SET = STATUS_PRIVACY_SET
 
 reload_privacy_sets()
 
 VERIFYING_USERS: set[tuple[int, int]] = set()
-VERIFYING_FILE = "data/user_verifying.json"
 
-VERIFYING_USERS = load_verifying_users()
+VERIFYING_USERS = db.load_verifying_users()
 
 def remove_code_from_pool(tier: str, code: str):
     if tier == "monthly":
@@ -813,26 +775,12 @@ async def monitor_confirmations():
 
 from typing import Literal
 
-data_folder = "messageCounterData"
-os.makedirs(data_folder, exist_ok=True)
-
-
-def get_server_data_path(guild_id):
-    return os.path.join(data_folder, f"messagecounter_{guild_id}.json")
-
-
 def load_server_data(guild_id):
-    path = get_server_data_path(guild_id)
-    if not os.path.exists(path):
-        return None
-    with open(path, "r") as f:
-        return json.load(f)
+    return db.load_server_data(guild_id)
 
 
 def save_server_data(guild_id, data):
-    path = get_server_data_path(guild_id)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=4)
+    db.save_server_data(guild_id, data)
 
 DEV_USER_ID = [857932717681147954]
 
@@ -867,14 +815,11 @@ async def violates_tos(text: str) -> bool:
         return True
 
 def load_gemini_servers():
-    if not os.path.exists("data/geminiServer.json"):
-        return {"servers": []}
-    with open("data/geminiServer.json", "r") as f:
-        return json.load(f)
+    return db.load_gemini_servers()
+
 
 def save_gemini_servers(data):
-    with open("data/geminiServer.json", "w") as f:
-        json.dump(data, f, indent=2)
+    db.save_gemini_servers(data)
 
                          
 user_graph_data = {}                                           
@@ -912,28 +857,19 @@ async def send_graph_embed(interaction: discord.Interaction, user_id):
 
 
 
-data_file = 'data/reaction_roles.json'
-if not os.path.exists(data_file):
-    with open(data_file, 'w') as f:
-        json.dump({}, f)
-
 def load_data():
-    with open(data_file, 'r') as f:
-        return json.load(f)
+    return db.load_reaction_roles()
+
 
 def save_data(data):
-    with open(data_file, 'w') as f:
-        json.dump(data, f, indent=4)
+    db.save_reaction_roles(data)
 
 def load_audit_config():
-    if not os.path.exists("data/audit_config.json"):
-        return {}
-    with open("data/audit_config.json", "r") as f:
-        return json.load(f)
+    return db.load_audit_config()
+
 
 def save_audit_config(data):
-    with open("data/audit_config.json", "w") as f:
-        json.dump(data, f, indent=4)
+    db.save_audit_config(data)
 
 def append_audit_log(guild_id: int, entry: str):
     os.makedirs("audit_logs", exist_ok=True)
@@ -975,28 +911,6 @@ DEFAULTS = {
     "phrase_audit": {}                                
 }
 
-                                          
-def _load_json(path: str, default):
-    if not os.path.exists(path): return default
-    try:
-        with open(path, "r", encoding="utf-8") as f: return json.load(f)
-    except Exception: return default
-
-def _save_json(path: str, data):
-    with open(path, "w", encoding="utf-8") as f: json.dump(data, f, indent=2)
-
-def load_all_config() -> Dict[str, Any]:
-    data = _load_json(CONFIG_PATH, {})
-    for _, cfg in list(data.items()):
-        for k, v in DEFAULTS.items(): cfg.setdefault(k, v)
-
-                                                              
-        if "channel_allowlist" in cfg and cfg["channel_allowlist"]:
-            olds = set(cfg.get("scam_channels") or [])
-            cfg["scam_channels"] = sorted(olds | set(cfg["channel_allowlist"]))
-            cfg["channel_allowlist"] = []                
-    return data
-
 def is_scam_whitelisted(member: discord.Member, cfg: dict) -> bool:
     users = set(cfg.get("scam_user_whitelist") or [])
     roles = set(cfg.get("scam_role_whitelist") or [])
@@ -1007,30 +921,52 @@ def is_scam_whitelisted(member: discord.Member, cfg: dict) -> bool:
     return False
 
 
-def save_all_config(data: Dict[str, Any]): _save_json(CONFIG_PATH, data)
+def is_admin_bypass(member: discord.Member) -> bool:
+    return member.guild_permissions.administrator or member.guild_permissions.manage_guild or member == member.guild.owner
+
 
 def get_guild_cfg(guild_id: int) -> Dict[str, Any]:
-    data = load_all_config()
-    g = str(guild_id)
-    if g not in data:
-        data[g] = DEFAULTS.copy()
-        save_all_config(data)
-    for k, v in DEFAULTS.items(): data[g].setdefault(k, v)
-    return data[g]
+    return db.get_guild_cfg(guild_id)
+
 
 def update_guild_cfg(guild_id: int, **patch):
-    data = load_all_config()
-    g = str(guild_id)
-    if g not in data: data[g] = DEFAULTS.copy()
-    data[g].update(patch)
-    save_all_config(data)
+    db.update_guild_cfg(guild_id, **patch)
 
-                                                          
-def load_actions() -> Dict[str, Any]: return _load_json(ACTIONS_PATH, {})
-def save_actions(data: Dict[str, Any]): _save_json(ACTIONS_PATH, data)
+
+def load_actions() -> Dict[str, Any]:
+    return db.load_actions()
+
+
+def save_actions(data: Dict[str, Any]):
+    db.save_actions(data)
+
+
 def append_feedback(entry: Dict[str, Any]):
-    with open(FEEDBACK_PATH, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    db.append_feedback(entry)
+
+
+def load_feedback_stats():
+    return db.load_feedback_stats()
+
+
+def get_pattern_confidence(reason: str, stats: dict = None) -> float:
+    return db.get_pattern_confidence(reason, stats)
+
+
+def degrade_pattern_weights(reasons: list):
+    return db.degrade_pattern_weights(reasons)
+
+
+def save_pattern_weights(weights: dict):
+    db.save_pattern_weights(weights)
+
+
+def compute_scan_confidence(reasons: list):
+    return db.compute_scan_confidence(reasons)
+
+
+def load_pattern_weights():
+    return db.load_pattern_weights()
 
                                                         
 COLOR_OK=0x57F287; COLOR_WARN=0xFEE75C; COLOR_BAD=0xED4245; COLOR_INFO=0xffffff
@@ -1075,67 +1011,343 @@ def extract_domains(text: str) -> List[str]:
                                                          
                          
 SCAM_RULES: List[Tuple[str, re.Pattern]] = [
-    ("Fake Nitro", re.compile(r"(?:free|claim|gift).{0,20}\bnitro\b", re.I)),
-    ("Wallet Connect / Verify Wallet", re.compile(r"\b(?:connect\s+wallet|wallet\s*connect|verify\s+wallet|sync\s+wallet)\b", re.I)),
-    ("Seed Phrase / Private Key", re.compile(r"\b(?:seed\s+phrase|recovery\s+phrase|private\s+key|mnemonic|keystore)\b", re.I)),
-    ("Crypto Airdrop", re.compile(r"\b(?:airdrop|claim\s+airdrop|retrodrop|season\s+\d+\s+airdrop)\b", re.I)),
-    ("Mint Now / Gasless Mint", re.compile(r"\b(?:mint\s+now|gasless\s+mint|free\s+mint|stealth\s+mint|presale\s+mint)\b", re.I)),
-    ("Giveaway / Double Your", re.compile(r"\bsend\s+\d+(?:\.\d+)?\s*(?:eth|btc|sol|usdt|usdc).{0,30}(?:get|receive)\s+\d+(?:\.\d+)?\s*(?:eth|btc|sol|usdt|usdc)\b", re.I)),
-    ("Drainer Keywords", re.compile(r"\b(?:drainer|sweeper|web3\s*auth|sign\s+to\s+claim)\b", re.I)),
-    ("Shortened Link", re.compile(r"https?://(?:bit\.ly|tinyurl\.com|t\.co|cutt\.ly|is\.gd|rb\.gy|linktr\.ee|links\.sh|goo\.gl)/\S*", re.I)),
+    ("Fake Nitro", re.compile(r"(?:free|claim|get|gift).{0,20}\bnitro\b", re.I)),
+    ("Wallet Connect / Verify Wallet", re.compile(r"\b(?:connect\s+wallet|wallet\s*connect|verify\s+wallet|sync\s+wallet|validate\s+wallet|secure\s+wallet|login|claim\s+reward)\b", re.I)),
+    ("Seed Phrase / Private Key", re.compile(r"\b(?:seed\s+phrase|recovery\s+phrase|private\s+key|mnemonic|keystore|backup\s+phrase)\b", re.I)),
+    ("Crypto Airdrop", re.compile(r"\b(?:airdrop|claim\s+airdrop|retrodrop|season\s+\d+\s+airdrop|free\s+token|limited\s+airdrop)\b", re.I)),
+    ("Mint Now / Gasless Mint", re.compile(r"\b(?:mint\s+now|gasless\s+mint|free\s+mint|stealth\s+mint|presale\s+mint|whitelist\s+mint)\b", re.I)),
+    ("Giveaway / Double Your", re.compile(r"\b(?:giveaway|double\s+(?:your|up)|send.{0,10}(?:get|receive).{0,10}(?:back|more)|you.{0,5}won|you.{0,5}selected|congratulations.{0,10}winner)\b", re.I)),
+    ("Drainer Keywords", re.compile(r"\b(?:drainer|sweeper|web3\s*auth|sign\s+to\s+claim|approve\s+transaction|set\s+approval)\b", re.I)),
+    ("Shortened Link", re.compile(r"https?://(?:bit\.ly|tinyurl\.com|t\.co|cutt\.ly|is\.gd|rb\.gy|linktr\.ee|links\.sh|goo\.gl|shorturl\.at|ow\.ly|buff\.ly|tiny\.cc)\/\S*", re.I)),
     ("Crypto Address (ETH)", re.compile(r"\b0x[a-fA-F0-9]{40}\b")),
     ("Crypto Address (SOL-like)", re.compile(r"\b[1-9A-HJ-NP-Za-km-z]{32,48}\b")),
+    ("Suspicious Verification", re.compile(r"\b(?:verify\s+(?:identity|account|age|payment|wallet)|confirm\s+(?:identity|account)|validation\s+required|identity.{0,10}verif)\b", re.I)),
+    ("Fake Login / Account Alert", re.compile(r"\b(?:suspicious\s+(?:login|activity|attempt)|account.{0,10}(?:locked|restricted|suspended|compromised)|limited.{0,10}account|unusual\s+(?:login|sign.in|activity))\b", re.I)),
+    ("Prize / Lottery Scam", re.compile(r"\b(?:you.{0,10}(?:won|winner|selected|chosen)|lottery.{0,10}(?:win|prize)|prize.{0,10}(?:claim|collect|receive))\b", re.I)),
+    ("Urgency / Limited Time", re.compile(r"\b(?:limited.{0,10}(?:supply|time|offer|spots)|act.{0,5}(?:now|fast|quickly)|expires.{0,10}(?:soon|today)|only.{0,10}(?:today|now|remaining)|last.{0,5}(?:chance|call|slot))\b", re.I)),
 ]
-SUSPICIOUS_TLDS    = {"ru","tk","gq","cf","ml","xyz","zip","mov","top","cam","rest","guru","click","country"}
-IMPERSONATION_ROOTS = {"discorcl","dlscord","disc0rd","steamcom","steamncommunity","steancommunity","faceb00k","go0gle"}
+
+DISCORD_INVITE_RE = re.compile(
+    r"(?:discord(?:app)?\.(?:com|gg|net|me|new|media)"
+    r"(?:/invite/[a-zA-Z0-9_-]+"
+    r"|/channels/\d+/\d+"
+    r"|/channels/\d+"
+    r"|/channels/@me"
+    r"|/[a-zA-Z0-9_-]+"
+    r"))",
+    re.I,
+)
+
+SUSPICIOUS_TLDS = {
+    "ru","tk","gq","cf","ml","xyz","zip","mov","top","cam","rest","guru","click","country",
+    "lol","fun","online","site","store","shop","live","work","agency","date","host",
+    "press","space","world","bid","trade","webcam","download","review","credit","science",
+    "party","racing","accountant","stream","loan","men","win","htn","fit","mom",
+    "surf","help","pw","me","bar","academy","pro","cloud","name","info","biz",
+}
+
+IMPERSONATION_ROOTS = {
+    "discorcl","dlscord","disc0rd","discordd","discourd","disccord","steamcom",
+    "steamncommunity","steancommunity","steamcommunty","faceb00k","go0gle",
+}
+
+BRAND_NAMES = {
+    # Gaming / Game Platforms
+    "discord","steam","steampowered","steamcommunity","steamgift","steamcard","roblox",
+    "minecraft","mojang","epicgames","epic","fortnite","origin","ubisoft","ubisoftconnect",
+    "battle","battlenet","blizzard","activision","xbox","xboxlive","playstation",
+    "playstationnetwork","psn","nintendo","nintendoaccount","ea","electronicarts",
+    "rockstar","rockstargames","rstar","socialclub","riot","riotgames","leagueoflegends",
+    "valorant","teamfighttactics","tft","wildrift","valorant","overwatch","diablo",
+    "worldofwarcraft","wow","hearthstone","destiny","bungie","squareenix","capcom",
+    "bandainamco","sega","konami","ubisoft","steamcommunity","steamuser","steamcdn",
+    "steamstore","steamdb","steamcharts","steamspy","gog","goggalaxy","humblebundle",
+    "humble","fanatical","greenmangaming","gmg","itchio","itch","gamejolt","newgrounds",
+    "kongregate","armorgames","addictinggames","miniclip","friv","coolmathgames",
+    "amongus","innersloth","factorio","terraria","stardewvalley",
+    # Social Media / Messaging
+    "facebook","fb","instagram","threads","twitter","x","tiktok","snapchat","whatsapp",
+    "telegram","signal","wechat","line","viber","kik","discord","discordapp",
+    "discordgift","discordnitro","discordstatus","discordmerch","discordstore",
+    "reddit","redditgifts","pinterest","tumblr","linkedin","myspace","flickr",
+    "foursquare","swarm","periscope","meetup","nextdoor","parler","gab","truthsocial",
+    "mastodon","bluesky","twitch","kik","groupme","slack","teams","skype",
+    "messenger","fbcdn","fbsbx",
+    # Tech / Software
+    "microsoft","windows","office","office365","microsoft365","outlook","hotmail",
+    "live","msn","bing","skype","teams","onedrive","sharepoint","azure","visualstudio",
+    "vscode","github","gitlab","bitbucket","git","npm","docker","kubernetes","k8s",
+    "python","pypi","anaconda","jupyter","tensorflow","pytorch","keras","google",
+    "gmail","googlemail","youtube","youtu","googlechat","googlemeet","hangouts",
+    "googleworkspace","gdrive","googlephotos","googlecalendar","googlemaps",
+    "googleearth","googleplay","googlepay","chrome","chromium","android","firebase",
+    "googlecloud","gcp","googleads","googleanalytics","googletagmanager","googlescholar",
+    "googletranslate","googleimages","googlebooks","googlelabs","android",
+    "apple","icloud","appleid","appstore","itunes","mac","iphone","ipad","imac",
+    "ios","ipados","macos","watchos","tvos","safari","applepay","applecard",
+    "applemusic","appletv","applearcade","icloud","me","mac",
+    "adobe","photoshop","illustrator","indesign","lightroom","premiere","aftereffects",
+    "adobecreativecloud","creativecloud","acrobat","reader","adobesign",
+    "oracle","java","mysql","sun","redhat","ibm","intel","amd","nvidia","corsair",
+    "logitech","razer","asus","msi","gigabyte","alienware","dell","hp","lenovo",
+    "acer","samsung","lg","sony","panasonic","toshiba","hitachi","nec","fujitsu",
+    "canon","nikon","epson","brother","cisco","juniper","vmware","salesforce",
+    "sap","autodesk","unity","unrealengine","realtek","mediatek","qualcomm",
+    "broadcom","seagate","wd","western digital","sandisk","kingston","corsair",
+    "crucial","evga","coolermaster","noctua","bequiet","thermaltake","nzxt",
+    "fractaldesign","corsair","razer","logitech","steelseries","hyperx",
+    # Streaming / Entertainment
+    "netflix","hulu","hbo","hbomax","max","disneyplus","disney","disneyplus",
+    "peacock","paramountplus","paramount","amazonprime","primevideo","prime",
+    "appleplus","appletvplus","spotify","deezer","tidal","pandora","soundcloud",
+    "bandcamp","appleitunes","applemusic","youtubemusic","youtubetv","youtubegaming",
+    "vimeo","dailymotion","twitcht","crunchyroll","funimation","hianime","9anime",
+    "anilist","myanimelist","mal","kissanime","gogoanime",
+    "plex","plexapp","emby","jellyfin","kodi","vlc","mpc",
+    # Finance / Crypto
+    "paypal","venmo","cashapp","square","stripe","amazonpay","googlepay","applepay",
+    "wise","transferwise","revolut","monzo","chime","robinhood","coinbase","coinbasepro",
+    "binance","binanceus","kraken","gemini","crypto","cryptocom","ftx","bitfinex",
+    "bittrex","poloniex","kucoin","huobi","okx","bybit","bitstamp","gateio",
+    "metamask","opensea","rarible","looksrare","blur","x2y2","foundation",
+    "superrare","niftygateway","mintable","magiceden","solsea","exchange",
+    "ledger","ledgerlive","trezor","safepal","trustwallet","exodus","electrum",
+    "myetherwallet","mycrypto","etherscan","bscscan","solscan","polygonscan",
+    "ethermine","f2pool","hiveon","flexpool","defi","uniswap","pancakeswap",
+    "sushiswap","curve","balancer","aave","compound","makerdao","lido",
+    "yearnfinance","yfi","chainlink","link","thegraph","graph","arweave",
+    "filecoin","ipfs","storj","sia","greymass","anchor","wax","eos",
+    # Shopping / E-commerce
+    "amazon","amazonaws","aws","ebay","etsy","walmart","target","bestbuy","costco",
+    "homedepot","lowes","ikea","alibaba","aliexpress","alipay","taobao","tmall",
+    "jdid","jd","rakuten","shopify","shop","wix","squarespace","godaddy",
+    "namecheap","bluehost","hostgator","dreamhost","siteground","cloudflare",
+    "wish","shein","zara","hm","uniqlo","nike","adidas","puma","reebok",
+    "underarmour","newbalance","vans","converse","supreme","gucci","prada",
+    "louisvuitton","lv","chanel","hermes","dior","fendi","versace","armani",
+    "ralphlauren","tommyhilfiger","calvinklein","levis","gap","oldnavy",
+    "macys","nordstrom","sephora","ulta","kohls","jcp","jcpenney","bhphotovideo",
+    "newegg","microcenter","frys","barnesandnoble","books",
+    # Education
+    "coursera","edx","udemy","udacity","skillshare","linkedinlearning","lynda",
+    "khanacademy","codecademy","pluralsight","treehouse","teamtreehouse",
+    "brilliant","datacamp","kaggle","chegg","quizlet","studocu","coursehero",
+    "turnitin","grammarly","proquest","jstor","scholar","academia",
+    "duolingo","babbel","rosettastone","memrise","busuu",
+    # Cloud / DevOps
+    "aws","amazonaws","amazonwebservices","azure","microsoftazure","googlecloud",
+    "gcp","heroku","digitalocean","linode","vultr","netlify","vercel","cloudflare",
+    "fastly","akamai","cloudfront","nginx","apache","traefik","haproxy",
+    "datadog","newrelic","splunk","elastic","elasticsearch","kibana","logstash",
+    "grafana","prometheus","influxdata","mongodb","mongodbatlas","redis",
+    "postgresql","postgres","mysql","mariadb","sqlite","cockroachdb","timescaledb",
+    # Security / Antivirus
+    "norton","mcafee","kaspersky","bitdefender","avast","avg","avira","malwarebytes",
+    "panda","trendmicro","sophos","fortinet","paloaltonetworks","crowdstrike",
+    "cloudflare","cloudflarestatus","okta","auth0","duo","lastpass","1password",
+    "dashlane","bitwarden","nordpass","nordvpn","expressvpn","surfshark",
+    "cyberghost","privateinternetaccess","pia","vyprvpn","protonvpn","protonmail",
+    "proton","tutanota","guardianproject",
+    # Travel / Transportation
+    "uber","lyft","grab","didichuxing","bolt","booking","bookingcom","expedia",
+    "kayak","skyscanner","airbnb","vrbo","tripadvisor","yelp","opentable",
+    "doordash","ubereats","grubhub","postmates","deliveroo","justeat",
+    "seamless","hello fresh","hellofresh","blueapron","homechef","sunbasket",
+    "airbnb","turo","zipcar","hertz","avis","enterprise","budget","national",
+    "delta","americanairlines","united","southwest","jetblue","spirit","frontier",
+    "aa","united","emirates","qatar","singaporeair","lufthansa","britishairways",
+    "airfrance","klm","cathaypacific","japanairlines","jal","anajapan",
+    # News / Media
+    "cnn","bbc","bbcnews","nytimes","wsj","washingtonpost","theguardian",
+    "reuters","bloomberg","forbes","businessinsider","techcrunch","theverge",
+    "wired","arstechnica","engadget","gizmodo","kotaku","polygon","ign","gamespot",
+    "eurogamer","rockpapershotgun","vg247","kotaku","gamasutra","gamesindustry",
+    "apnews","usatoday","buzzfeed","vice","vox","slate","politico","huffpost",
+    "foxnews","msnbc","abcnews","nbcnews","cbsnews","npr",
+    # Cryptocurrencies (tickers/names)
+    "bitcoin","btc","ethereum","eth","solana","sol","cardano","ada","ripple","xrp",
+    "polkadot","dot","avalanche","avax","polygon","matic","chainlink","link",
+    "stellar","xlm","litecoin","ltc","dogecoin","doge","shibainu","shib",
+    "tron","trx","toncoin","ton","cosmos","atom","near","nearprotocol",
+    "vechain","vet","algorand","algo","fantom","ftm","theta","thetatoken",
+    "helium","hnt","filecoin","fil","internetcomputer","icp","aptos","apt",
+    "sui","arbitrum","arb","optimism","op","zksync","immutable","imx",
+    "sandbox","sand","decentraland","mana","axieinfinity","axs",
+    "usdt","tether","usdc","usdcoin","dai","busd","frax","crv",
+    # Common platform strings scammers target
+    "nitro","discordgift","discordnitro","boost","gift","gifting","airdrop",
+    "giveaway","whitelist","presale","nft","nfts","defi","web3","walletconnect",
+    "openc","discordmedia","discordstatus","discordapp",
+    # Broader tech
+    "tradingview","investing","coingecko","coinmarketcap","dexscreener",
+    "debank","zapper","zerion","dune","nansen","glassnode","messari",
+    "theblock","coindesk","cointelegraph","u.today","cryptonews",
+    "hashrate","mining","miner","pool","testnet","mainnet","node",
+}
+
+KNOWN_SHORTENERS = {
+    "bit.ly","tinyurl.com","t.co","cutt.ly","is.gd","rb.gy","linktr.ee",
+    "links.sh","goo.gl","shorturl.at","ow.ly","buff.ly","tiny.cc","bl.ink",
+    "shorte.st","adf.ly","bc.vc","bit.do","v.gd","cli.gs","urlz.me","short.cm",
+}
+
+LEGITIMATE_REGISTERED = {
+    "discord.com","discordapp.com","discord.gg","discord.media","discord.net",
+    "discord.new","discordstatus.com","discordmerch.com","support.discord.com",
+    "steampowered.com","steamcommunity.com","steam.com","steamgames.com",
+    "steamcdn-a.akamaihd.net","steamstore-a.akamaihd.net",
+    "github.com","gitlab.com","githubusercontent.com",
+    "youtube.com","youtu.be","google.com","gmail.com","googlemail.com",
+    "netflix.com","nflxext.com","nflximg.com","nflxvideo.net",
+    "spotify.com","twitch.tv","twitchcdn.net","reddit.com","redd.it",
+    "x.com","twitter.com","t.co",
+    "paypal.com","paypalobjects.com",
+    "amazon.com","amazonaws.com","aws.amazon.com",
+    "ebay.com","ebayimg.com","ebaystatic.com",
+    "coinbase.com","coinbasepro.com","binance.com","binance.us",
+    "microsoft.com","microsoftonline.com","office.com","office365.com",
+    "live.com","outlook.com","hotmail.com","msn.com",
+    "apple.com","icloud.com","itunes.apple.com",
+    "roblox.com","robloxlabs.com","rbxcdn.com",
+    "minecraft.net","minecraftforum.net","mojang.com",
+    "epicgames.com","epicgames.dev","fortnite.com","unrealengine.com",
+    "origin.com","ea.com","battle.net","blizzard.com","activision.com",
+    "xbox.com","xboxlive.com","playstation.com","nintendo.com",
+    "linkedin.com","facebook.com","fb.com","fbcdn.net","instagram.com",
+    "whatsapp.com","telegram.org","t.me","signal.org",
+    "tiktok.com","snapchat.com","pinterest.com",
+    "adobe.com","adobesign.com","adobecreativecloud.com",
+    "cloudflare.com","cloudflarestatus.com",
+    "nginx.com","apache.org",
+    "python.org","pypi.org","docker.com","docker.io",
+    "npmjs.com","npm.com","yarnpkg.com","nodejs.org",
+    "mongodb.com","mysql.com","postgresql.org","redis.io",
+    "elastic.co","grafana.com","prometheus.io",
+    "digitalocean.com","linode.com","heroku.com","netlify.com","vercel.com",
+    "wix.com","squarespace.com","shopify.com",
+    "godaddy.com","namecheap.com",
+    "cloudfront.net","akamaihd.net","fastly.net",
+    "nytimes.com","wsj.com","washingtonpost.com","bbc.com","bbc.co.uk",
+    "cnn.com","reuters.com","bloomberg.com","forbes.com",
+    "techcrunch.com","theverge.com","wired.com","arstechnica.com",
+    "paypal.com","venmo.com","cash.app","square.com","stripe.com",
+    "wise.com","revolut.com","robinhood.com",
+    "coinmarketcap.com","coingecko.com","tradingview.com","investing.com",
+    "etherscan.io","bscscan.com","solscan.io","polygonscan.com",
+    "opensea.io","rarible.com",
+    "messenger.com","skype.com","slack.com","teams.com",
+    "zoom.us","zoom.com","webex.com","gotomeeting.com",
+    "dropbox.com","dropboxusercontent.com","box.com","wetransfer.com",
+    "notion.so","notion.site","miro.com","figma.com","canva.com",
+    "atlassian.com","jira.com","trello.com","confluence.com",
+    "wordpress.com","blogger.com","medium.com","substack.com",
+    "patreon.com","kofi.com","buymeacoffee.com","gofundme.com",
+    "change.org","kickstarter.com","indiegogo.com",
+}
+
+
+def _sld(host: str) -> str:
+    """Return the second-level domain (e.g. 'discord' from 'discord.xyz')."""
+    parts = host.split(".")
+    if len(parts) >= 2:
+        return parts[-2].lower()
+    return host.lower()
+
+
+def _fuzzy_match(word: str, targets: set) -> bool:
+    """Check if word is a close edit-distance match to any target."""
+    word = word.lower()
+    if word in targets:
+        return True
+    if len(word) < 4:
+        return False
+    for t in targets:
+        tl = len(t)
+        wl = len(word)
+        if abs(tl - wl) > 2:
+            continue
+        if wl < 4 or tl < 4:
+            continue
+        diffs = sum(a != b for a, b in zip(word, t))
+        short = min(wl, tl)
+        if short <= 4:
+            if diffs <= 1:
+                return True
+        elif diffs / short <= 0.25:
+            return True
+    return False
+
 
 def domain_is_whitelisted(dom: str, allow: List[str]) -> bool:
     dom = dom.lower()
     for a in allow:
-        if dom == a or dom.endswith("." + a): return True
+        if dom == a or dom.endswith("." + a):
+            return True
     return False
+
 
 def root_label(host: str) -> str:
     parts = host.split(".")
     return parts[-2] if len(parts) >= 2 else host
+
 
 def scan_message_for_scams(content: str, cfg: dict) -> List[str]:
     hits: List[str] = []
     content = content or ""
     norm = normalize_phrase(content)
 
-                      
-    if norm in set(cfg.get("phrase_allowlist") or []): return []
+    if norm in set(cfg.get("phrase_allowlist") or []):
+        return []
 
     domains = extract_domains(content)
     allow = [d.lower() for d in (cfg.get("domain_allowlist") or [])]
     short_allow = [s.lower() for s in (cfg.get("shortener_allowlist") or [])]
     nitro_requires_url = bool(cfg.get("nitro_requires_url", True))
 
-                   
     for label, pat in SCAM_RULES:
-        if not pat.search(content): continue
-        if label == "Fake Nitro" and nitro_requires_url and not domains: continue
+        if not pat.search(content):
+            continue
+        if label == "Fake Nitro" and nitro_requires_url and not domains:
+            continue
         hits.append(label)
 
-                  
     for host in domains:
         host = host.lower()
-        if domain_is_whitelisted(host, allow): continue
-        if any(host.endswith(s) for s in short_allow):                     
+        if domain_is_whitelisted(host, allow):
             continue
-        if host.startswith("xn--"): hits.append("Punycode/IDN")
+        if any(host.endswith(s) for s in short_allow):
+            continue
+
+        if host in LEGITIMATE_REGISTERED:
+            continue
+
         tld = host.rsplit(".", 1)[-1] if "." in host else ""
-        if tld in SUSPICIOUS_TLDS: hits.append("Suspicious TLD")
-        if root_label(host) in IMPERSONATION_ROOTS: hits.append("Impersonation Domain")
 
-                                              
-    if hits and set(hits).issubset({"Crypto Address (ETH)", "Crypto Address (SOL-like)"}): return []
+        if host.startswith("xn--"):
+            hits.append("Punycode/IDN")
 
-                             
+        if tld in SUSPICIOUS_TLDS:
+            hits.append("Suspicious TLD")
+
+        if root_label(host) in IMPERSONATION_ROOTS:
+            hits.append("Impersonation Domain")
+
+        if tld not in ("com", "net", "org", "io", "co", "app", "dev"):
+            sld = _sld(host)
+            if _fuzzy_match(sld, BRAND_NAMES):
+                hits.append("Brand Impersonation")
+
+    if cfg.get("block_ad") and DISCORD_INVITE_RE.search(content):
+            hits.append("Discord Ad / Invite")
+
+    if hits and set(hits).issubset({"Crypto Address (ETH)", "Crypto Address (SOL-like)"}):
+        return []
+
     seen, out = set(), []
     for h in hits:
-        if h not in seen: out.append(h); seen.add(h)
+        if h not in seen:
+            out.append(h)
+            seen.add(h)
     return out
 
                                                          
@@ -1415,13 +1627,6 @@ async def sync(interaction: discord.Interaction):
     else:
         await interaction.response.send_message('You must be the owner to use this command!')
 
-_EMPTY_STRUCTURES = {
-    "verify_system": {"guilds": []},
-}
-for _fname, _default in _EMPTY_STRUCTURES.items():
-    if not os.path.exists(f"data/{_fname}.json"):
-        write_json(_default, _fname)
-
 # ── Populate shared state module ──
 state.client = client
 state.PREFIX = PREFIX
@@ -1515,6 +1720,7 @@ state.load_gemini_servers = load_gemini_servers
 state.save_gemini_servers = save_gemini_servers
 state.load_actions = load_actions
 state.save_actions = save_actions
+state.append_feedback = append_feedback
 state.append_audit_log = append_audit_log
 state.read_audit_log = read_audit_log
 state.load_audit_config = load_audit_config
@@ -1524,6 +1730,12 @@ state.update_guild_cfg = update_guild_cfg
 state.embed_basic = embed_basic
 state.admin_or_manage_guild = admin_or_manage_guild
 state.normalize_phrase = normalize_phrase
+state.load_feedback_stats = load_feedback_stats
+state.get_pattern_confidence = get_pattern_confidence
+state.degrade_pattern_weights = degrade_pattern_weights
+state.compute_scan_confidence = compute_scan_confidence
+state.save_pattern_weights = save_pattern_weights
+state.load_pattern_weights = load_pattern_weights
 state.extract_domains = extract_domains
 state.scan_message_for_scams = scan_message_for_scams
 state.try_python_syntax_check = try_python_syntax_check
@@ -1532,6 +1744,7 @@ state.fmt_discord_time = fmt_discord_time
 state._chunk_lines = _chunk_lines
 state.build_overview_embed = build_overview_embed
 state.is_scam_whitelisted = is_scam_whitelisted
+state.is_admin_bypass = is_admin_bypass
 state.fetch_tx_data = fetch_tx_data
 state.parse_tx_data = parse_tx_data
 state.fetch_word_example = fetch_word_example
