@@ -4,7 +4,7 @@ from discord.ext import commands
 from discord.ui import View, Button, Modal, TextInput, Select
 from typing import Optional, Literal
 from datetime import datetime, timezone, timedelta
-import json, random, asyncio, re, math, io, os
+import json, random, asyncio, re, math, io, os, uuid, time
 import aiohttp
 from discord.utils import format_dt
 
@@ -152,8 +152,8 @@ class SecurityCog(commands.Cog):
 
     @app_commands.command(name="codehelper_enable", description="Enable Inline Code Helper in this channel")
     async def codehelper_enable(self, interaction: discord.Interaction):
-        if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
         from state import COLOR_OK, admin_or_manage_guild, embed_basic, get_guild_cfg, update_guild_cfg
+        if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
         cfg = get_guild_cfg(interaction.guild_id)
         chans = set(cfg.get("codehelper_channels") or []); chans.add(interaction.channel_id)
         update_guild_cfg(interaction.guild_id, codehelper_channels=sorted(chans))
@@ -162,8 +162,8 @@ class SecurityCog(commands.Cog):
 
     @app_commands.command(name="codehelper_disable", description="Disable Inline Code Helper in this channel")
     async def codehelper_disable(self, interaction: discord.Interaction):
-        if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
         from state import COLOR_WARN, admin_or_manage_guild, embed_basic, get_guild_cfg, update_guild_cfg
+        if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
         cfg = get_guild_cfg(interaction.guild_id)
         chans = set(cfg.get("codehelper_channels") or []); chans.discard(interaction.channel_id)
         update_guild_cfg(interaction.guild_id, codehelper_channels=sorted(chans))
@@ -173,52 +173,56 @@ class SecurityCog(commands.Cog):
     @app_commands.command(name="set_log_channel", description="Set a channel for scam logs (mandatory for Scam Shield)")
     # @app_commands.describe(channel="Select a channel to receive scam logs")
     async def set_log_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
         from state import COLOR_OK, admin_or_manage_guild, embed_basic, update_guild_cfg
+        if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
         update_guild_cfg(interaction.guild_id, log_channel_id=channel.id)
         await interaction.response.send_message(embed=embed_basic("Log Channel Set", f"Logs → {channel.mention}", COLOR_OK), ephemeral=True)
 
                                      
 
-    @app_commands.command(name="allowlist_phrase_add", description="Allow this exact phrase (no links required)")
-    # @app_commands.describe(phrase="Exact phrase to allow (it will be normalized)")
-    async def allowlist_phrase_add(self, interaction: discord.Interaction, phrase: str):
-        if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
-        from state import COLOR_OK, admin_or_manage_guild, embed_basic, get_guild_cfg, normalize_phrase, update_guild_cfg
-        cfg = get_guild_cfg(interaction.guild_id); phrases = set(cfg.get("phrase_allowlist") or [])
-        phrases.add(normalize_phrase(phrase)); update_guild_cfg(interaction.guild_id, phrase_allowlist=sorted(phrases))
-        await interaction.response.send_message(embed=embed_basic("Phrase allowlisted", f"“{phrase}”", COLOR_OK), ephemeral=True)
 
-
-    @app_commands.command(name="allowlist_phrase_remove", description="Remove a phrase from the allowlist")
-    # @app_commands.describe(phrase="Exact phrase to remove (normalized)")
-    async def allowlist_phrase_remove(self, interaction: discord.Interaction, phrase: str):
-        if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
-        from state import COLOR_OK, admin_or_manage_guild, embed_basic, get_guild_cfg, normalize_phrase, update_guild_cfg
-        cfg = get_guild_cfg(interaction.guild_id); phrases = set(cfg.get("phrase_allowlist") or [])
-        norm = normalize_phrase(phrase)
-        if norm in phrases: phrases.remove(norm); update_guild_cfg(interaction.guild_id, phrase_allowlist=sorted(phrases))
-        await interaction.response.send_message(embed=embed_basic("Phrase removed", f"“{phrase}”", COLOR_OK), ephemeral=True)
-
-
-    @app_commands.command(name="allowlist_phrase_list", description="List allowlisted phrases")
-    async def allowlist_phrase_list(self, interaction: discord.Interaction):
-        cfg = get_guild_cfg(interaction.guild_id); phrases = cfg.get("phrase_allowlist") or []
-        from state import COLOR_INFO, embed_basic, get_guild_cfg
-        text = "\n".join(f"• {p}" for p in phrases) or "No phrases."
-        await interaction.response.send_message(embed=embed_basic("Phrase Allowlist", text, COLOR_INFO), ephemeral=True)
 
                      
 
     @app_commands.command(name="scan_test", description="Test the scam scanner against custom text")
     # @app_commands.describe(text="The text to scan (paste your message here)")
     async def scan_test(self, interaction: discord.Interaction, text: str):
+        from state import COLOR_INFO, embed_basic, extract_domains, get_guild_cfg, scan_message_for_scams, compute_scan_confidence
         cfg = get_guild_cfg(interaction.guild_id)
-        from state import COLOR_INFO, embed_basic, extract_domains, get_guild_cfg, scan_message_for_scams
         domains = extract_domains(text); reasons = scan_message_for_scams(text, cfg)
         e = embed_basic("Scan Test", "", COLOR_INFO)
         e.add_field(name="Domains parsed", value=", ".join(domains) or "—", inline=False)
         e.add_field(name="Reasons", value="\n".join(f"• {r}" for r in reasons) or "—", inline=False)
+        if reasons:
+            confidence, details = compute_scan_confidence(reasons)
+            lines = [f"**{k}**: w={v['weight']}, b={v['base']}, fin={v['final']}" for k, v in details.items()]
+            lines.append(f"\n**Overall confidence**: {confidence:.0%}")
+            if confidence >= 0.65:
+                lines.append("→ Action: **Delete**")
+            else:
+                lines.append("→ Action: **Flag (warn only)**")
+            e.add_field(name="Confidence Analysis", value="\n".join(lines), inline=False)
+        await interaction.response.send_message(embed=e, ephemeral=True)
+
+
+    @app_commands.command(name="scam_stats", description="View scam pattern confidence & feedback stats")
+    async def scam_stats(self, interaction: discord.Interaction):
+        from state import COLOR_INFO, embed_basic, load_feedback_stats
+        stats = load_feedback_stats()
+        if not stats:
+            return await interaction.response.send_message(embed=embed_basic("Scam Stats", "No feedback data yet.", COLOR_INFO), ephemeral=True)
+        sorted_reasons = sorted(stats.items(), key=lambda x: x[1]["fp"] + x[1]["tp"], reverse=True)
+        lines = []
+        for reason, s in sorted_reasons[:20]:
+            total = s["tp"] + s["fp"]
+            ratio = s["tp"] / max(total, 1)
+            bar = "█" * int(ratio * 10) + "░" * (10 - int(ratio * 10))
+            lines.append(f"**{reason}**  {bar}  {s['tp']}✓ / {s['fp']}✗  ({ratio:.0%})")
+        total_tp = sum(s["tp"] for s in stats.values())
+        total_fp = sum(s["fp"] for s in stats.values())
+        overall = total_tp / max(total_tp + total_fp, 1)
+        lines.insert(0, f"**Overall**: {total_tp} true positives, {total_fp} false positives ({overall:.0%} accuracy)\n")
+        e = embed_basic("Scam Pattern Confidence", "\n".join(lines[:25]), COLOR_INFO)
         await interaction.response.send_message(embed=e, ephemeral=True)
 
 
@@ -234,8 +238,8 @@ class SecurityCog(commands.Cog):
 
     @app_commands.command(name="debug_safety", description="Diagnose readiness & config")
     async def debug_safety(self, interaction: discord.Interaction):
-        cfg = get_guild_cfg(interaction.guild_id)
         from state import COLOR_INFO, embed_basic, get_guild_cfg
+        cfg = get_guild_cfg(interaction.guild_id)
         has_mc = getattr(self.bot.intents, "message_content", False)
         has_mem = getattr(self.bot.intents, "members", False)
         lines = [
@@ -434,8 +438,26 @@ class SecurityCog(commands.Cog):
             f"• Surge threshold: {cfg.get('surge_threshold_per_minute')}/minute",
             f"• Log channel: {f'<#{cfg.get('log_channel_id')}>' if cfg.get('log_channel_id') else '❌ NOT SET'}",
             f"• Domain allowlist: {', '.join(cfg.get('domain_allowlist') or []) or '—'}",
+            f"• Block Discord Ads: **{'Yes' if cfg.get('block_ad') else 'No'}**",
         ]
         await interaction.response.send_message(embed=embed_basic("Server Status", "\n".join(lines), COLOR_INFO), ephemeral=True)
+
+
+    @app_commands.command(name="block_ad", description="Block Discord invite links (discord.gg, discord.com/invite) as spam")
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.choices(state=[
+        app_commands.Choice(name="Enable", value="enable"),
+        app_commands.Choice(name="Disable", value="disable")
+    ])
+    async def block_ad(self, interaction: discord.Interaction, state: app_commands.Choice[str]):
+        from state import COLOR_OK, COLOR_WARN, update_guild_cfg
+        enabled = state.value == "enable"
+        update_guild_cfg(interaction.guild_id, block_ad=enabled)
+        c = COLOR_OK if enabled else COLOR_WARN
+        await interaction.response.send_message(
+            embed=discord.Embed(title="Ad Block", description=f"Discord invite blocking **{'Enabled' if enabled else 'Disabled'}**.", color=c),
+            ephemeral=True
+        )
 
     @app_commands.command(
         name="youngest",
@@ -487,5 +509,36 @@ class SecurityCog(commands.Cog):
         await interaction.followup.send(embed=view._build_embed(), view=view, ephemeral=True)
 
 
+# ── Context menu: Review message (scam / not-a-scam) ──────────────
+@app_commands.context_menu(name="🔍 Review Content")
+async def ctx_review_content(interaction: discord.Interaction, message: discord.Message):
+    from state import admin_or_manage_guild, embed_basic, COLOR_INFO, load_actions, save_actions, extract_domains, scan_message_for_scams, get_guild_cfg, ScamFeedbackView
+    if not admin_or_manage_guild(interaction):
+        return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
+    cfg = get_guild_cfg(interaction.guild_id)
+    reasons = scan_message_for_scams(message.content or "", cfg)
+    try:
+        for em in message.embeds:
+            if em.title: reasons += scan_message_for_scams(em.title, cfg)
+            if em.description: reasons += scan_message_for_scams(em.description, cfg)
+            for f in em.fields: reasons += scan_message_for_scams(f"{f.name or ''} {f.value or ''}", cfg)
+    except Exception:
+        pass
+    s, ordered = set(), []
+    for r in reasons:
+        if r not in s: ordered.append(r); s.add(r)
+    reasons = ordered
+    domains = extract_domains(message.content or "")
+    action_id = str(uuid.uuid4())
+    actions = load_actions()
+    actions[action_id] = {"guild_id": interaction.guild_id, "author_id": message.author.id, "content": message.content or "", "reasons": reasons, "domains": domains, "ts": int(time.time())}
+    save_actions(actions)
+    embed = embed_basic("Content Review", f"**Author**: {message.author.mention}\n**Reasons**: {(', '.join(reasons) if reasons else 'No patterns matched')}", COLOR_INFO)
+    embed.add_field(name="Snippet", value=f"```{((message.content or '')[:500])}```", inline=False)
+    if domains: embed.add_field(name="Domains", value=", ".join(domains), inline=False)
+    await interaction.response.send_message(embed=embed, view=ScamFeedbackView(action_id=action_id), ephemeral=True)
+
+
 async def setup(bot):
     await bot.add_cog(SecurityCog(bot))
+    bot.tree.add_command(ctx_review_content)

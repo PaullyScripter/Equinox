@@ -7,40 +7,28 @@ import random
 import asyncio
 import time
 from typing import Optional
-
-GIVEAWAY_FOLDER = "giveawayFolder"
-os.makedirs(GIVEAWAY_FOLDER, exist_ok=True)
+import cogs.database as db
 
 _entry_cooldowns: dict[int, float] = {}
 
-def get_guild_giveaway_path(guild_id: int) -> str:
-    return f"{GIVEAWAY_FOLDER}/giveaways_{guild_id}.json"
-
-def ensure_guild_json_file(guild_id: int):
-    path = get_guild_giveaway_path(guild_id)
-    if not os.path.isfile(path):
-        with open(path, 'w') as f:
-            json.dump({}, f)
 
 def load_guild_giveaways(guild_id: int):
-    path = get_guild_giveaway_path(guild_id)
-    if not os.path.exists(path):
-        return {}
-    with open(path, 'r') as f:
-        return json.load(f)
+    return db.load_guild_giveaways(guild_id)
+
 
 def save_guild_giveaways(guild_id: int, data: dict):
-    path = get_guild_giveaway_path(guild_id)
-    with open(path, 'w') as f:
-        json.dump(data, f, indent=4)
+    db.save_guild_giveaways(guild_id, data)
+
+
+def ensure_guild_json_file(guild_id: int):
+    pass
+
 
 def remove_guild_giveaway(guild_id: int, message_id: int):
-    giveaways = load_guild_giveaways(guild_id)
+    giveaways = db.load_guild_giveaways(guild_id)
     if str(message_id) in giveaways:
         del giveaways[str(message_id)]
-        path = get_guild_giveaway_path(guild_id)
-        with open(path, 'w') as f:
-            json.dump(giveaways, f)
+        db.save_guild_giveaways(guild_id, giveaways)
 
 
 class GiveawayView(View):

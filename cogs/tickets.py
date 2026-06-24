@@ -3,17 +3,13 @@ from discord import app_commands
 from discord.ext import commands
 from typing import Optional
 
+import cogs.database as db
 from cogs.ticket_views import BuyPremium2, DeleteTicketSystemButton, TicketButton
-from cogs.ticket_views import load_json, save_json, get_ticket_config, append_ticket_history, add_ticket_participant
+from cogs.ticket_views import get_ticket_config, append_ticket_history, add_ticket_participant
 
-TICKET_DIR = "ticket-json"
-
-def guild_ticket_path(guild_id: int) -> str:
-    return f"{TICKET_DIR}/{guild_id}-ticket.json"
 
 def load_guild_tickets(guild_id: int):
-    path = guild_ticket_path(guild_id)
-    data = load_json(path)
+    data = db.get_ticket_config(guild_id)
     return data if data is not None else {"message": []}
 
 
@@ -96,7 +92,6 @@ class TicketsCog(commands.Cog):
         ticket_msg = await interaction.followup.send(embed=embed, view=view)
         view.message = ticket_msg
 
-        path = guild_ticket_path(guild_id)
         update_data = {
             "messageid": ticket_msg.id,
             "channel_id": interaction.channel.id,
@@ -107,14 +102,14 @@ class TicketsCog(commands.Cog):
             "disabled": False,
             "max_ticket": None
         }
-        try:
-            file_data = load_json(path)
-            if file_data is None:
-                file_data = {"message": []}
+        file_data = db.get_ticket_config(guild_id)
+        if file_data is None or not file_data.get("message"):
+            file_data = {"message": [update_data], "category": category.id, "role": ticket_roles}
+        else:
             file_data.setdefault("message", []).append(update_data)
-        except Exception:
-            file_data = {"message": [update_data]}
-        save_json(path, file_data)
+            file_data["category"] = category.id
+            file_data["role"] = ticket_roles
+        db.save_ticket_config(guild_id, file_data)
 
 
     def _is_ticket_authorized(self, interaction: discord.Interaction) -> bool:

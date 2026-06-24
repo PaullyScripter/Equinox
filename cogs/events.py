@@ -5,7 +5,7 @@ from discord.ui import View, Button, Modal, TextInput, Select
 from discord.utils import format_dt
 from typing import Optional
 from datetime import datetime, timezone, timedelta
-import json, random, asyncio, re, math, io, os
+import json, random, asyncio, re, math, io, os, uuid, time
 
 class EventsCog(commands.Cog):
     def __init__(self, bot):
@@ -148,7 +148,7 @@ class EventsCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        from state import load_server_data, save_server_data, PREFIX, _log_command, load_audit_config, append_audit_log, get_guild_cfg, is_scam_whitelisted, scan_message_for_scams, load_actions, save_actions, extract_domains, embed_basic, COLOR_BAD, COLOR_WARN, COLOR_OK, CODEBLOCK_CLOSED_RE, CODEBLOCK_UNTERMINATED_RE, try_python_syntax_check, ScamFeedbackView
+        from state import load_server_data, save_server_data, PREFIX, _log_command, load_audit_config, append_audit_log, get_guild_cfg, is_scam_whitelisted, is_admin_bypass, scan_message_for_scams, load_actions, save_actions, extract_domains, embed_basic, COLOR_BAD, COLOR_WARN, COLOR_OK, CODEBLOCK_CLOSED_RE, CODEBLOCK_UNTERMINATED_RE, try_python_syntax_check, ScamFeedbackView, compute_scan_confidence, degrade_pattern_weights, append_feedback
 
         if message.author.bot:
             return
@@ -188,6 +188,7 @@ class EventsCog(commands.Cog):
             if is_scam_whitelisted(message.author, cfg):
                 pass
             else:
+                skip_delete = is_admin_bypass(message.author)
                 reasons = scan_message_for_scams(message.content or "", cfg)
                 try:
                     for em in message.embeds:
@@ -201,11 +202,14 @@ class EventsCog(commands.Cog):
                     if r not in s: ordered.append(r); s.add(r)
                 reasons = ordered
                 if reasons:
-                    deleted = False
-                    try:
-                        await message.delete(); deleted = True
-                    except Exception:
-                        pass
+                    confidence, conf_details = compute_scan_confidence(reasons)
+                    should_delete = confidence >= 0.50 and not skip_delete
+                    action_label = "removed" if should_delete else "flagged"
+                    if should_delete:
+                        try:
+                            await message.delete()
+                        except Exception:
+                            pass
                     log_channel = message.guild.get_channel(cfg["log_channel_id"])
                     if log_channel and log_channel.permissions_for(message.guild.me).send_messages:
                         action_id = str(uuid.uuid4())
@@ -220,22 +224,26 @@ class EventsCog(commands.Cog):
                             "ts": int(time.time()),
                         }
                         save_actions(actions)
-                        desc = f"Message from **{message.author}** {'was removed' if deleted else 'was flagged'} in {message.channel.mention}."
-                        e = embed_basic("Scam/Phishing Content Intercepted", desc, COLOR_BAD)
+                        desc = f"Message from **{message.author}** was **{action_label}** in {message.channel.mention} (confidence: {confidence:.0%})."
+                        e = embed_basic("Scam/Phishing Content Flagged", desc, COLOR_BAD if should_delete else COLOR_WARN)
                         e.add_field(name="Reasons", value=" • " + "\n • ".join(reasons), inline=False)
                         snippet = (message.content or "").strip()
                         e.add_field(name="Snippet", value=f"```{snippet[:900]}```" if snippet else "`(no text)`", inline=False)
                         if domains: e.add_field(name="Domains", value=", ".join(domains)[:1000], inline=False)
+                        if conf_details:
+                            detail_lines = [f"**{k}**: w={v['weight']}, b={v['base']}, →{v['final']}" for k, v in conf_details.items()]
+                            e.add_field(name="Confidence Breakdown", value="\n".join(detail_lines), inline=False)
                         e.timestamp = discord.utils.utcnow()
                         await log_channel.send(embed=e, view=ScamFeedbackView(action_id=action_id))
-                    try:
-                        await message.author.send(embed=embed_basic(
-                            "Your message was blocked",
-                            "We detected content that resembles known scams/phishing. A moderator can mark it **Not a Scam** in the log.",
-                            COLOR_WARN
-                        ))
-                    except Exception:
-                        pass
+                    if should_delete:
+                        try:
+                            await message.author.send(embed=embed_basic(
+                                "Your message was blocked",
+                                "We detected content that resembles known scams/phishing. A moderator can mark it **Not a Scam** in the log.",
+                                COLOR_WARN
+                            ))
+                        except Exception:
+                            pass
                     return
 
         if message.channel.id in set(cfg.get("codehelper_channels") or []):
@@ -262,7 +270,7 @@ class EventsCog(commands.Cog):
                         await message.reply(embed=e, mention_author=False)
 
         data = load_server_data(guild_id)
-        if data and data.get("status") == "enabled":
+        if data and data.get("status") is True:
             if str(message.channel.id) not in data.get("blacklisted_channels", []):
                 user_id = str(message.author.id)
                 if user_id not in data.get("opted_out_users", []):

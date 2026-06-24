@@ -5,16 +5,15 @@ from discord.ui import View, Button, Modal, TextInput, Select
 from typing import Optional, Literal
 from datetime import datetime, timezone, timedelta
 import json, random, asyncio, re, math, io, os
+import cogs.database as db
 
-data_file = 'data/reactionroles.json'
+
 def load_data():
-    if not os.path.exists(data_file):
-        return {}
-    with open(data_file, 'r') as f:
-        return json.load(f)
+    return db.load_reaction_roles_cog()
+
+
 def save_data(data):
-    with open(data_file, 'w') as f:
-        json.dump(data, f, indent=2)
+    db.save_reaction_roles_cog(data)
 
 async def template_name_autocomplete(interaction: discord.Interaction, current: str):
     data = load_data()

@@ -5,45 +5,32 @@ from asyncio import sleep
 import json
 import os
 import re
+import cogs.database as db
 
-ACTIVE_TICKETS_PATH = "ticket-json/active-tickets.json"
-ARCHIVED_TICKETS_PATH = "ticket-json/archived-tickets.json"
-TICKET_HISTORY_PATH = "ticket-json/ticket-history.json"
-
-def load_json(path):
-    try:
-        with open(path, 'r') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return None
-
-def save_json(path, data):
-    with open(path, 'w') as f:
-        json.dump(data, f, indent=2)
 
 def load_active_tickets():
-    data = load_json(ACTIVE_TICKETS_PATH)
-    return data if data is not None else {}
+    return db.load_active_tickets()
+
 
 def save_active_tickets(data):
-    save_json(ACTIVE_TICKETS_PATH, data)
+    db.save_active_tickets(data)
+
 
 def load_archived_tickets():
-    data = load_json(ARCHIVED_TICKETS_PATH)
-    return data if data is not None else {}
+    return db.load_archived_tickets()
+
 
 def save_archived_tickets(data):
-    save_json(ARCHIVED_TICKETS_PATH, data)
+    db.save_archived_tickets(data)
+
 
 def get_ticket_config(guild_id: int):
-    path = f"ticket-json/{guild_id}-ticket.json"
-    data = load_json(path)
-    if data is None:
-        return {"message": []}
-    return data
+    return db.get_ticket_config(guild_id)
+
 
 def save_ticket_config(guild_id: int, data):
-    save_json(f"ticket-json/{guild_id}-ticket.json", data)
+    db.save_ticket_config(guild_id, data)
+
 
 def find_message_entry(guild_id: int, message_id: int):
     config = get_ticket_config(guild_id)
@@ -52,43 +39,29 @@ def find_message_entry(guild_id: int, message_id: int):
             return msg, config
     return None, config
 
+
 def load_ticket_history():
-    data = load_json(TICKET_HISTORY_PATH)
-    return data if data is not None else {}
+    return db.load_ticket_history()
+
 
 def save_ticket_history(data):
-    save_json(TICKET_HISTORY_PATH, data)
+    db.save_ticket_history(data)
+
 
 def append_ticket_history(channel_id: int, action: str, user_id: int, note: str = ""):
-    history = load_ticket_history()
-    key = str(channel_id)
-    if key not in history:
-        history[key] = []
-    history[key].append({
-        "action": action,
-        "user_id": user_id,
-        "at": discord.utils.utcnow().isoformat(),
-        "note": note
-    })
-    save_ticket_history(history)
+    db.append_ticket_history(channel_id, action, user_id, note)
 
-PARTICIPANTS_PATH = "ticket-json/ticket-participants.json"
 
 def load_ticket_participants():
-    data = load_json(PARTICIPANTS_PATH)
-    return data if data is not None else {}
+    return db.load_ticket_participants()
+
 
 def save_ticket_participants(data):
-    save_json(PARTICIPANTS_PATH, data)
+    db.save_ticket_participants(data)
+
 
 def add_ticket_participant(channel_id: int, user_id: int):
-    participants = load_ticket_participants()
-    key = str(channel_id)
-    if key not in participants:
-        participants[key] = []
-    if user_id not in participants[key]:
-        participants[key].append(user_id)
-    save_ticket_participants(participants)
+    db.add_ticket_participant(channel_id, user_id)
 
 TRANSCRIPTS_DIR = "ticket-json/transcripts"
 

@@ -935,7 +935,7 @@ class UtilityCog(commands.Cog):
         timestamp = int(datetime.now(timezone.utc).timestamp())
 
         cache_key = f"{from_currency}:{to_currency}"
-        cached = getattr(exchange, "_rate_cache", {}).get(cache_key)
+        cached = getattr(self.exchange, "_rate_cache", {}).get(cache_key)
         if cached and (timestamp - cached["ts"] < 60):
             rate = cached["rate"]
             converted = amount * rate if is_from_crypto or (not is_from_crypto and not is_to_crypto) else amount / rate
@@ -973,9 +973,9 @@ class UtilityCog(commands.Cog):
                         await interaction.followup.send("One or both currencies are invalid.", embed=embed, ephemeral=True)
                         return
 
-                    if not hasattr(exchange, "_rate_cache"):
-                        exchange._rate_cache = {}
-                    exchange._rate_cache[cache_key] = {"rate": rate, "ts": timestamp}
+                    if not hasattr(self.exchange, "_rate_cache"):
+                        self.exchange._rate_cache = {}
+                    self.exchange._rate_cache[cache_key] = {"rate": rate, "ts": timestamp}
                 except Exception:
                     await interaction.followup.send("Failed to fetch exchange rate. Try again later.", ephemeral=True)
                     return
