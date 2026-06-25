@@ -512,7 +512,7 @@ class SecurityCog(commands.Cog):
 # ── Context menu: Review message (scam / not-a-scam) ──────────────
 @app_commands.context_menu(name="🔍 Review Content")
 async def ctx_review_content(interaction: discord.Interaction, message: discord.Message):
-    from state import admin_or_manage_guild, embed_basic, COLOR_INFO, load_actions, save_actions, extract_domains, scan_message_for_scams, get_guild_cfg, ScamFeedbackView
+    from state import admin_or_manage_guild, embed_basic, COLOR_INFO, insert_action, extract_domains, scan_message_for_scams, get_guild_cfg, ScamFeedbackView
     if not admin_or_manage_guild(interaction):
         return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
     cfg = get_guild_cfg(interaction.guild_id)
@@ -522,17 +522,16 @@ async def ctx_review_content(interaction: discord.Interaction, message: discord.
             if em.title: reasons += scan_message_for_scams(em.title, cfg)
             if em.description: reasons += scan_message_for_scams(em.description, cfg)
             for f in em.fields: reasons += scan_message_for_scams(f"{f.name or ''} {f.value or ''}", cfg)
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger("equinox.security").warning(f"Error scanning review embeds: {e}")
     s, ordered = set(), []
     for r in reasons:
         if r not in s: ordered.append(r); s.add(r)
     reasons = ordered
     domains = extract_domains(message.content or "")
     action_id = str(uuid.uuid4())
-    actions = load_actions()
-    actions[action_id] = {"guild_id": interaction.guild_id, "author_id": message.author.id, "content": message.content or "", "reasons": reasons, "domains": domains, "ts": int(time.time())}
-    save_actions(actions)
+    insert_action(action_id, interaction.guild_id, message.author.id, message.content or "", reasons, domains, int(time.time()))
     embed = embed_basic("Content Review", f"**Author**: {message.author.mention}\n**Reasons**: {(', '.join(reasons) if reasons else 'No patterns matched')}", COLOR_INFO)
     embed.add_field(name="Snippet", value=f"```{((message.content or '')[:500])}```", inline=False)
     if domains: embed.add_field(name="Domains", value=", ".join(domains), inline=False)

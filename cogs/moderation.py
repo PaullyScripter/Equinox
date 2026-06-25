@@ -78,7 +78,7 @@ class ModerationCog(commands.Cog):
         await interaction.guild.kick(user=member, reason=reason)
         await interaction.response.send_message(embed=discord.Embed(title=f"Successfully kicked {member.name}", description=f"**Reason:** {reason}", color=0xffffff))
       else:
-        if interaction.user.top_role <= member.top_role or clienttop_role <= member.top_role or interaction.user.id == member.id or member.id == interaction.guild.owner.top_role:
+        if interaction.user.top_role <= member.top_role or clienttop_role <= member.top_role or interaction.user.id == member.id or member == interaction.guild.owner:
           await interaction.response.send_message(embed=discord.Embed(title="Failed to kick, please check if the member's hierchy is:", description="> Higher than yours\n> Equals to yours\n> Higher than mine\n> Equals to mine\n> Is you\n> Is server's owner", color=0xffffff))
         else:
           await interaction.guild.kick(user=member, reason=reason)
@@ -90,8 +90,17 @@ class ModerationCog(commands.Cog):
     @app_commands.checks.has_permissions(ban_members=True)
     @app_commands.checks.bot_has_permissions(ban_members=True)
     async def unban(self, interaction: discord.Interaction, memberid: str):
-        user = self.bot.get_user(int(memberid))
-        await interaction.guild.unban(user) 
+        try:
+            uid = int(memberid)
+        except ValueError:
+            return await interaction.response.send_message(embed=discord.Embed(title="Invalid ID", description="User ID must be a numeric Discord ID.", color=0xffffff))
+        user = self.bot.get_user(uid)
+        if user is None:
+            try:
+                user = await self.bot.fetch_user(uid)
+            except discord.NotFound:
+                return await interaction.response.send_message(embed=discord.Embed(title="User not found", description=f"No user with ID `{memberid}` exists.", color=0xffffff))
+        await interaction.guild.unban(user)
         await interaction.response.send_message(embed=discord.Embed(title=f"Successfully unban {user}!", color=0xffffff))
 
 
@@ -110,7 +119,7 @@ class ModerationCog(commands.Cog):
         msg = await interaction.followup.send(embed=discord.Embed(title=f"Successfully banned {member.name}", description=f"**Reason:** {reason}", color=0xffffff), view=view)
         view.message = msg
       else:
-        if interaction.user.top_role <= member.top_role or clienttop_role <= member.top_role or interaction.user.id == member.id or member.id == interaction.guild.owner.top_role:
+        if interaction.user.top_role <= member.top_role or clienttop_role <= member.top_role or interaction.user.id == member.id or member == interaction.guild.owner:
           await interaction.response.send_message(embed=discord.Embed(title="Failed to ban, please check if the member's hierchy is:", description="> Higher than yours\n> Equals to yours\n> Higher than mine\n> Equals to mine\n> Is you\n> Is server's owner", color=0xffffff))
         else:
           await interaction.guild.ban(user=member, reason=reason)

@@ -464,11 +464,17 @@ def load_stats() -> dict:
 def save_stats(data: dict):
     with _db_lock:
         c = _conn()
-        c.execute("DELETE FROM command_stats")
         for ev in data.get("events", []):
             c.execute("INSERT INTO command_stats (user_id, command, timestamp) VALUES (?, ?, ?)",
                       (ev.get("user_id"), ev.get("command"), ev.get("timestamp")))
         c.commit()
+
+
+def insert_command_stat(user_id: int, command: str, timestamp: str):
+    with _db_lock:
+        _conn().execute("INSERT INTO command_stats (user_id, command, timestamp) VALUES (?, ?, ?)",
+                        (user_id, command, timestamp))
+        _conn().commit()
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -681,12 +687,20 @@ def load_actions() -> dict:
 def save_actions(data: dict):
     with _db_lock:
         c = _conn()
-        c.execute("DELETE FROM scam_actions")
         for aid, ad in data.items():
-            c.execute("INSERT INTO scam_actions (action_id, guild_id, author_id, content, reasons, domains, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            c.execute("INSERT OR REPLACE INTO scam_actions (action_id, guild_id, author_id, content, reasons, domains, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
                       (aid, ad.get("guild_id"), ad.get("author_id"), ad.get("content"),
                        json.dumps(ad.get("reasons", [])), json.dumps(ad.get("domains", [])), ad.get("timestamp")))
         c.commit()
+
+
+def insert_action(action_id: str, guild_id: int, author_id: int, content: str, reasons: list, domains: list, timestamp: int):
+    with _db_lock:
+        _conn().execute(
+            "INSERT OR REPLACE INTO scam_actions (action_id, guild_id, author_id, content, reasons, domains, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (action_id, guild_id, author_id, content, json.dumps(reasons), json.dumps(domains), timestamp)
+        )
+        _conn().commit()
 
 
 # ══════════════════════════════════════════════════════════════════

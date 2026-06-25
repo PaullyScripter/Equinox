@@ -4,6 +4,8 @@ from discord.ext import commands
 from discord.ui import View, Button, Modal, TextInput, Select
 from discord.utils import format_dt
 from typing import Optional
+import logging
+log = logging.getLogger("equinox.events")
 from datetime import datetime, timezone, timedelta
 import json, random, asyncio, re, math, io, os, uuid, time
 
@@ -32,9 +34,9 @@ class EventsCog(commands.Cog):
                
         try:
             synced = await self.bot.tree.sync()
-            print(f"Synced {len(synced)} command(s)")
+            log.info(f"Synced {len(synced)} command(s)")
         except Exception as e:
-            print(f"Error syncing commands: {e}")
+            log.error(f"Error syncing commands: {e}")
 
                                                                         
         monthly_data      = await asyncio.to_thread(read_json, "monthcode")
@@ -93,14 +95,19 @@ class EventsCog(commands.Cog):
     @commands.Cog.listener()
     async def on_member_join(self, member):
       from state import load_autoping_channels, load_autorole
-      if member.guild.id == 1243501449879752775:
+      target_server_id = 1243501449879752775
+      if member.guild.id == target_server_id:
         if not member.bot:
           guild = member.guild
-          role =  guild.get_role(1244973833115533373)
-          await member.add_roles(role)
-          channel = guild.get_channel(1244983181006868480)
-          msg = await channel.send(member.mention)
-          await msg.delete()
+          verify_role_id = 1244973833115533373
+          verify_channel_id = 1244983181006868480
+          role = guild.get_role(verify_role_id)
+          if role:
+              await member.add_roles(role)
+          channel = guild.get_channel(verify_channel_id)
+          if channel:
+              msg = await channel.send(member.mention)
+              await msg.delete()
       else:
         guild = member.guild
         channel_ids = load_autoping_channels(guild.id)
@@ -130,8 +137,10 @@ class EventsCog(commands.Cog):
       if member.guild.id == 1243501449879752775:
         if not member.bot:
           guild = member.guild
-          channel = guild.get_channel(1245008595066814474)
-          await channel.send(embed=discord.Embed(title=f"Bye {member} 💀", description=f"> You have been here since: {member.joined_at.strftime('%A, %B %d %Y')}\n> {guild} now has {str(guild.member_count)} member(s)", color=0xffffff))
+          leave_channel_id = 1245008595066814474
+          channel = guild.get_channel(leave_channel_id)
+          if channel:
+              await channel.send(embed=discord.Embed(title=f"Bye {member}", description=f"> You have been here since: {member.joined_at.strftime('%A, %B %d %Y')}\n> {guild} now has {str(guild.member_count)} member(s)", color=0xffffff))
 
 
     @commands.Cog.listener()
@@ -195,8 +204,8 @@ class EventsCog(commands.Cog):
                         if em.title: reasons += scan_message_for_scams(em.title, cfg)
                         if em.description: reasons += scan_message_for_scams(em.description, cfg)
                         for f in em.fields: reasons += scan_message_for_scams(f"{f.name or ''} {f.value or ''}", cfg)
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.warning(f"Error scanning embeds: {e}")
                 s, ordered = set(), []
                 for r in reasons:
                     if r not in s: ordered.append(r); s.add(r)
@@ -208,22 +217,26 @@ class EventsCog(commands.Cog):
                     if should_delete:
                         try:
                             await message.delete()
-                        except Exception:
+                        except discord.Forbidden:
+                            log.warning(f"No permission to delete scam message in {message.guild.id}")
+                        except discord.NotFound:
                             pass
+                        except Exception as e:
+                            log.error(f"Error deleting scam message: {e}")
                     log_channel = message.guild.get_channel(cfg["log_channel_id"])
                     if log_channel and log_channel.permissions_for(message.guild.me).send_messages:
                         action_id = str(uuid.uuid4())
                         domains = extract_domains(message.content or "")
-                        actions = load_actions()
-                        actions[action_id] = {
-                            "guild_id": message.guild.id,
-                            "author_id": message.author.id,
-                            "content": message.content or "",
-                            "reasons": reasons,
-                            "domains": domains,
-                            "ts": int(time.time()),
-                        }
-                        save_actions(actions)
+                        from state import insert_action
+                        insert_action(
+                            action_id,
+                            message.guild.id,
+                            message.author.id,
+                            message.content or "",
+                            reasons,
+                            domains,
+                            int(time.time()),
+                        )
                         desc = f"Message from **{message.author}** was **{action_label}** in {message.channel.mention} (confidence: {confidence:.0%})."
                         e = embed_basic("Scam/Phishing Content Flagged", desc, COLOR_BAD if should_delete else COLOR_WARN)
                         e.add_field(name="Reasons", value=" • " + "\n • ".join(reasons), inline=False)
@@ -242,8 +255,10 @@ class EventsCog(commands.Cog):
                                 "We detected content that resembles known scams/phishing. A moderator can mark it **Not a Scam** in the log.",
                                 COLOR_WARN
                             ))
-                        except Exception:
+                        except discord.Forbidden:
                             pass
+                        except Exception as e:
+                            log.warning(f"Failed to DM scam warning to {message.author.id}: {e}")
                     return
 
         if message.channel.id in set(cfg.get("codehelper_channels") or []):
@@ -286,8 +301,10 @@ class EventsCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
-      channel = self.bot.get_channel(1242633669890277456)
-      embed=discord.Embed(title=f"{self.bot.user} was invited to a new guild!", description=f"```js\nGuild Name: {guild}\nGuild Membercount: {guild.member_count}\nClient Guilds: {len(self.bot.guilds)}\nClient Users: {len(set(self.bot.get_all_members()))}\n```", color =0xffffff)
+      log_channel_id = 1242633669890277456
+      channel = self.bot.get_channel(log_channel_id)
+      if channel:
+          embed=discord.Embed(title=f"{self.bot.user} was invited to a new guild!", description=f"```js\nGuild Name: {guild}\nGuild Membercount: {guild.member_count}\nClient Guilds: {len(self.bot.guilds)}\nClient Users: {len(set(self.bot.get_all_members()))}\n```", color =0xffffff)
       embed.set_thumbnail(url=guild.icon)
       msg = await channel.send(embed=embed)
 

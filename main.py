@@ -1,3 +1,11 @@
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger("equinox")
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -38,6 +46,7 @@ import aiohttp
 try:
     import fandom
 except ModuleNotFoundError:
+    log.warning("fandom module not installed")
     fandom = None
 from aiohttp import ClientSession
 import re 
@@ -55,6 +64,26 @@ from typing import Dict, Any, List, Tuple, Optional, Literal
 from io import BytesIO
 import httpx
 import asyncpg
+import functools
+
+
+def retry_async(max_retries=3, base_delay=1.0):
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            last_exc = None
+            for attempt in range(max_retries):
+                try:
+                    return await func(*args, **kwargs)
+                except (aiohttp.ClientError, httpx.HTTPError, asyncio.TimeoutError) as e:
+                    last_exc = e
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)
+                        log.warning(f"Retry {attempt + 1}/{max_retries} for {func.__name__} after {delay}s: {e}")
+                        await asyncio.sleep(delay)
+            raise last_exc
+        return wrapper
+    return decorator
 
 API_KEY = os.getenv("API_KEY")
 ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY")
@@ -444,18 +473,7 @@ def save_stats(data: dict) -> None:
 def _log_command(user_id: int, command_name: str) -> None:
     if user_id in IGNORED_USER_IDS:
         return
-
-    data = load_stats()
-    events = data.get("events", [])
-
-    events.append({
-        "user_id": int(user_id),
-        "command": command_name,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    })
-
-    data["events"] = events
-    save_stats(data)
+    db.insert_command_stat(int(user_id), command_name, datetime.now(timezone.utc).isoformat())
 
 
 def load_autoping_channels(guild_id):
@@ -633,6 +651,7 @@ SUPPORTED_FIAT = {
 SUPPORTED_CHAINS = {"btc", "ltc", "doge", "eth"}
 
                              
+@retry_async(max_retries=2, base_delay=0.5)
 async def fetch_tx_data(chain: str, txid: str):
     async with aiohttp.ClientSession() as session:
         if chain == "btc":
@@ -784,6 +803,7 @@ def save_server_data(guild_id, data):
 
 DEV_USER_ID = [857932717681147954]
 
+@retry_async(max_retries=3, base_delay=1.0)
 async def ask_gemini(prompt: str):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
@@ -873,15 +893,20 @@ def save_audit_config(data):
 
 def append_audit_log(guild_id: int, entry: str):
     os.makedirs("audit_logs", exist_ok=True)
+    if not isinstance(guild_id, int) or guild_id <= 0:
+        guild_id = 0
     path = f"audit_logs/{guild_id}.txt"
     if os.path.exists(path) and os.path.getsize(path) > 20 * 1024 * 1024:
         base, ext = os.path.splitext(path)
         import shutil
         shutil.move(path, f"{base}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}{ext}")
+        log.info(f"Rotated audit log: {path}")
     with open(path, "a", encoding="utf-8") as f:
         f.write(entry + "\n")
 
 def read_audit_log(guild_id: int):
+    if not isinstance(guild_id, int) or guild_id <= 0:
+        return []
     path = f"audit_logs/{guild_id}.txt"
     if not os.path.exists(path):
         return []
@@ -1367,10 +1392,18 @@ def try_python_syntax_check(code: str) -> Tuple[bool, str]:
 
                                                          
 JOIN_WINDOW_SECONDS = 60
+MAX_JOIN_WINDOW_GUILDS = 1000
 join_windows: Dict[int, deque] = defaultdict(lambda: deque(maxlen=2500))
+def _trim_join_windows():
+    if len(join_windows) > MAX_JOIN_WINDOW_GUILDS:
+        oldest = sorted(join_windows.keys(), key=lambda gid: join_windows[gid][-1] if join_windows[gid] else 0)[:len(join_windows) - MAX_JOIN_WINDOW_GUILDS]
+        for gid in oldest:
+            del join_windows[gid]
+
 def record_join(guild_id: int):
     now = time.time(); dq = join_windows[guild_id]; dq.append(now)
     while dq and (now - dq[0] > JOIN_WINDOW_SECONDS): dq.popleft()
+    _trim_join_windows()
 def joins_last_minute(guild_id: int) -> int:
     record_join(guild_id); dq = join_windows[guild_id]; now = time.time()
     return sum(1 for t in dq if now - t <= JOIN_WINDOW_SECONDS)
@@ -1720,6 +1753,7 @@ state.load_gemini_servers = load_gemini_servers
 state.save_gemini_servers = save_gemini_servers
 state.load_actions = load_actions
 state.save_actions = save_actions
+state.insert_action = db.insert_action
 state.append_feedback = append_feedback
 state.append_audit_log = append_audit_log
 state.read_audit_log = read_audit_log
@@ -1762,5 +1796,13 @@ state.update = update
 state.random_color = random_color
 state.update_note = update_note
 
-client.run(os.getenv("DISCORD_TOKEN"))
+try:
+    client.run(os.getenv("DISCORD_TOKEN"))
+except KeyboardInterrupt:
+    log.info("Received shutdown signal, closing...")
+finally:
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(client.close())
+    loop.close()
+    log.info("Shutdown complete.")
   
