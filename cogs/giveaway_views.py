@@ -112,7 +112,7 @@ class GiveawayView(View):
                 embed = discord.Embed(title="Winner Announcement", color=0xffffff)
                 embed.add_field(name="", value=f"<a:snow:1311099641932152903> **Prize:** {self.giveaway_data['prize']}", inline=False)
                 embed.add_field(name="", value=f"<a:snow:1311099641932152903> **Winner:** {winner.mention}", inline=False)
-                embed.add_field(name="<a:snow:1311099641932152903> </giveaway_manage:1370458427100368898>", value=f"", inline=False)
+                embed.add_field(name="<a:snow:1311099641932152903> /giveaway manage", value=f"", inline=False)
 
                 try:
                     await winner.send(f"Congratulations! You won the **{self.giveaway_data['prize']}** giveaway in **{self.guild_name}**!")
@@ -132,13 +132,13 @@ class GiveawayView(View):
                 embed = discord.Embed(title="Winner Announcement", color=0xffffff)
                 embed.add_field(name="", value=f"<a:snow:1311099641932152903> **Prize:** {self.giveaway_data['prize']}", inline=False)
                 embed.add_field(name="", value=f"<a:snow:1311099641932152903> **Winner:** N/A", inline=False)
-                embed.add_field(name="<a:snow:1311099641932152903> </giveaway_manage:1370458427100368898>", value=f"", inline=False)
+                embed.add_field(name="<a:snow:1311099641932152903> /giveaway manage", value=f"", inline=False)
         else:
             await self.message.channel.send("No entries were found for the giveaway.")
             embed = discord.Embed(title="Winner Announcement", color=0xffffff)
             embed.add_field(name="", value=f"<a:snow:1311099641932152903> **Prize:** {self.giveaway_data['prize']}", inline=False)
             embed.add_field(name="", value=f"<a:snow:1311099641932152903> **Winner:** N/A", inline=False)
-            embed.add_field(name="<a:snow:1311099641932152903> </giveaway_manage:1370458427100368898>", value=f"", inline=False)
+            embed.add_field(name="<a:snow:1311099641932152903> /giveaway manage", value=f"", inline=False)
 
         guild_id = self.giveaway_data["guild_id"]
         giveaways = load_guild_giveaways(guild_id)

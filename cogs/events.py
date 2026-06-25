@@ -482,7 +482,7 @@ class EventsCog(commands.Cog):
         extra = entry.extra
         if extra is not None:
             extra_lines = []
-            extra_dict = vars(extra) if not isinstance(extra, (int, str)) else {}
+            extra_dict = vars(extra) if hasattr(extra, '__dict__') else (extra if isinstance(extra, dict) else {})
             for ek, ev in extra_dict.items():
                 if not ek.startswith("_"):
                     extra_lines.append(f"**{ek.replace('_', ' ').title()}:** {self._fmt_val(ev)}")

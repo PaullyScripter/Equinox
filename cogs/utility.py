@@ -434,6 +434,8 @@ class UtilityCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    messages = app_commands.Group(name="messages", description="Message counter commands")
+
     @app_commands.command(name="embed", description="Build an embed with a visual editor. (Manage messages required)")
     @app_commands.checks.cooldown(1, 60, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_messages=True)
@@ -787,21 +789,6 @@ class UtilityCog(commands.Cog):
         view.message = msg
 
 
-    @app_commands.command(name="clone", description="Clone current channel. (Manage channels required)")
-    @app_commands.checks.cooldown(1, 10, key=lambda i: (i.user.id))
-    @app_commands.checks.has_permissions(manage_channels=True)
-    @app_commands.checks.bot_has_permissions(manage_channels=True)
-    async def clone(self, interaction: discord.Interaction, channel: Optional[discord.TextChannel]):
-      from state import CloneButton
-      await interaction.response.defer()
-      if channel == None:
-        channel = interaction.channel
-      view = CloneButton(interaction.user.id, channel)
-      embed = discord.Embed(title="Cloning Caution ⚠️", description="```diff\nThe clone command allows you to either:\n+ Clone and delete channel\nor\n- Clone channel only\n```", color=0xffffff)
-      embed.set_footer(text=f"Issued by {interaction.user} | Ignore to cancel", icon_url=interaction.user.avatar)
-      msg = await interaction.followup.send(interaction.user.mention, embed=embed, view=view)
-      view.message = msg
-
 
 
     @app_commands.command(name="timedif", description="Find time differences between 2 message id.")
@@ -1031,14 +1018,13 @@ class UtilityCog(commands.Cog):
 
                                                         
 
-    @app_commands.command(name="messagecounter")
-    # @app_commands.describe(option="Enable or disable the message counter")
+    @messages.command(name="toggle")
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.choices(option=[
         app_commands.Choice(name="Enable", value="enable"),
         app_commands.Choice(name="Disable", value="disable")
     ])
-    async def messagecounter(self, interaction: discord.Interaction, option: app_commands.Choice[str]):
+    async def messages_toggle(self, interaction: discord.Interaction, option: app_commands.Choice[str]):
         from state import load_server_data, save_server_data
 
         guild_id = str(interaction.guild.id)
@@ -1062,9 +1048,8 @@ class UtilityCog(commands.Cog):
             await interaction.response.send_message(embed=discord.Embed(title="Message Counter", description=f"```js\nStatus: Disabled.\n```", color = 0xffffff), ephemeral=True)
 
 
-    @app_commands.command(name="messagecount")
-    # @app_commands.describe(user="User to check message count for")
-    async def messagecount(self, interaction: discord.Interaction, user: discord.User = None):
+    @messages.command(name="count")
+    async def messages_count(self, interaction: discord.Interaction, user: discord.User = None):
         from state import load_server_data, save_server_data
         user = user or interaction.user
         guild_id = str(interaction.guild.id)
@@ -1073,7 +1058,7 @@ class UtilityCog(commands.Cog):
             await interaction.response.send_message(
                 embed=discord.Embed(
                     title="Message Counter",
-                    description="```\nMessage counter has not been set up for this server, use /messagecounter.\n```",
+                    description="```\nMessage counter has not been set up for this server, use /messages toggle.\n```",
                     color=0xffffff
                 ),
                 ephemeral=True
@@ -1102,8 +1087,8 @@ class UtilityCog(commands.Cog):
     
     
 
-    @app_commands.command(name="messageblacklistview")
-    async def messageblacklistview(self, interaction: discord.Interaction):
+    @messages.command(name="blacklist_view")
+    async def messages_blacklist_view(self, interaction: discord.Interaction):
         from state import load_server_data, save_server_data
 
         guild_id = str(interaction.guild.id)
@@ -1130,10 +1115,9 @@ class UtilityCog(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-    @app_commands.command(name="messagecountdeduct")
-    # @app_commands.describe(user="User to deduct message count from", amount="Amount to deduct")
+    @messages.command(name="deduct")
     @app_commands.checks.has_permissions(administrator=True)
-    async def messagecountdeduct(self, interaction: discord.Interaction, user: discord.User, amount: int):
+    async def messages_deduct(self, interaction: discord.Interaction, user: discord.User, amount: int):
         from state import load_server_data, save_server_data, PaginationView
 
         guild_id = str(interaction.guild.id)
@@ -1154,8 +1138,8 @@ class UtilityCog(commands.Cog):
 
 
 
-    @app_commands.command(name="messagecountleaderboard")
-    async def messagecountleaderboard(self, interaction: discord.Interaction):
+    @messages.command(name="leaderboard")
+    async def messages_leaderboard(self, interaction: discord.Interaction):
         from state import load_server_data, save_server_data, PaginationView
         guild_id = str(interaction.guild.id)
         data = load_server_data(guild_id)
@@ -1163,7 +1147,7 @@ class UtilityCog(commands.Cog):
             await interaction.response.send_message(
                 embed=discord.Embed(
                     title="Message Counter",
-                    description="```\nMessage counter has not been set up for this server, use /messagecounter.\n```",
+                    description="```\nMessage counter has not been set up for this server, use /messages toggle.\n```",
                     color=0xffffff
                 ),
                 ephemeral=True
@@ -1210,9 +1194,8 @@ class UtilityCog(commands.Cog):
             await message.edit(view=PaginationView(embeds))
 
 
-    @app_commands.command(name="messagecountgive", description="Transfer your message count to another user.")
-    # @app_commands.describe(to_user="User to give messages to", amount="Amount to transfer")
-    async def messagecountgive(self, interaction: discord.Interaction, to_user: discord.User, amount: int):
+    @messages.command(name="give", description="Transfer your message count to another user.")
+    async def messages_give(self, interaction: discord.Interaction, to_user: discord.User, amount: int):
         from state import load_server_data, save_server_data
         from_user = interaction.user
 
@@ -1231,7 +1214,7 @@ class UtilityCog(commands.Cog):
             await interaction.response.send_message(
                 embed=discord.Embed(
                     title="Message Count Transfer",
-                    description="```\nMessage counter has not been set up for this server, use /messagecounter.\n```",
+                    description="```\nMessage counter has not been set up for this server, use /messages toggle.\n```",
                     color=0xffffff
                 ),
                 ephemeral=True
@@ -1265,14 +1248,13 @@ class UtilityCog(commands.Cog):
 
 
 
-    @app_commands.command(name="messageblacklist")
-    # @app_commands.describe(action="Add or remove a blacklisted channel", channel="Channel to blacklist/unblacklist")
+    @messages.command(name="blacklist")
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.choices(action=[
         app_commands.Choice(name="Add", value="add"),
         app_commands.Choice(name="Remove", value="remove")
     ])
-    async def messageblacklist(self, interaction: discord.Interaction, action: app_commands.Choice[str], channel: discord.TextChannel):
+    async def messages_blacklist(self, interaction: discord.Interaction, action: app_commands.Choice[str], channel: discord.TextChannel):
         from state import load_server_data, save_server_data
 
         guild_id = str(interaction.guild.id)

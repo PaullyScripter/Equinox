@@ -12,7 +12,9 @@ class PresenceCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="server_member_activity", description="View members by presence status or stats.")
+    activity = app_commands.Group(name="activity", description="Presence and activity commands")
+
+    @activity.command(name="status", description="View members by presence status or stats.")
     @app_commands.choices(status=[
         app_commands.Choice(name="Online", value="online"),
         app_commands.Choice(name="Do Not Disturb", value="dnd"),
@@ -91,7 +93,7 @@ class PresenceCog(commands.Cog):
         await interaction.response.send_message(embed=pages[0], view=view)
 
 
-    @app_commands.command(name="top_games", description="Show the top games currently being played in this server.")
+    @activity.command(name="games", description="Show the top games currently being played in this server.")
     async def top_games(self, interaction: discord.Interaction):
         from state import PRIVACY_SET
         guild = interaction.guild
@@ -129,7 +131,7 @@ class PresenceCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
 
-    @app_commands.command(name="now_playing", description="See what a user is currently playing or doing.")
+    @activity.command(name="now", description="See what a user is currently playing or doing.")
     # @app_commands.describe(user="The user to check.")
     async def now_playing(self, interaction: discord.Interaction, user: discord.Member):
         from state import PRIVACY_SET, STATUS_PRIVACY_SET
@@ -217,8 +219,8 @@ class PresenceCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
 
-    @app_commands.command(
-        name="role_presence_stats",
+    @activity.command(
+        name="role",
         description="View presence stats for a specific role."
     )
     async def role_presence_stats(self, 
@@ -260,7 +262,7 @@ class PresenceCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
 
-    @app_commands.command(name="privacy", description="Manage your privacy and tracking settings")
+    @activity.command(name="privacy", description="Manage your privacy and tracking settings")
     async def privacy(self, interaction: discord.Interaction):
         uid = interaction.user.id
         gid = interaction.guild.id if interaction.guild else None
@@ -268,8 +270,8 @@ class PresenceCog(commands.Cog):
         view = PrivacyView(uid, gid)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-    @app_commands.command(
-        name="server_member_stats",
+    @activity.command(
+        name="members",
         description="Advanced member analytics: overview, top roles, and age graph."
     )
     async def server_member_stats(self, interaction: discord.Interaction):

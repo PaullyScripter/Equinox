@@ -25,7 +25,9 @@ class ReactionRolesCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="rrgame", description="Make a selection role (Dev only)")
+    reactionrole = app_commands.Group(name="reactionrole", description="Reaction role commands")
+
+    @reactionrole.command(name="game", description="Make a selection role (Dev only)")
     async def rr(self, interaction: discord.Interaction):
       if interaction.user.id in devs:
         from state import devs, rrSelectGames, rrSelectGender, rrSelectPing, rrSelectServer
@@ -53,7 +55,7 @@ class ReactionRolesCog(commands.Cog):
 
 
 
-    @app_commands.command(name="reactionrolesetup", description="Add or remove a reaction role template.")
+    @reactionrole.command(name="template", description="Add or remove a reaction role template.")
     @app_commands.autocomplete(name=template_name_autocomplete)
     @app_commands.checks.has_permissions(manage_roles=True)
     # @app_commands.describe(name="Name of the template", action="Choose whether to add or remove the template")
@@ -105,7 +107,7 @@ class ReactionRolesCog(commands.Cog):
             await interaction.response.send_message(f"Are you sure you want to delete `{name}`?", view=view, ephemeral=True)
 
 
-    @app_commands.command(name="reactionroleedit", description="Add or remove roles from a template.")
+    @reactionrole.command(name="edit", description="Add or remove roles from a template.")
     @app_commands.autocomplete(name=template_name_autocomplete)
     @app_commands.checks.has_permissions(manage_roles=True)
     # @app_commands.describe(name="Template name", role="Role to add or remove", action="Add or Remove", emoji="Optional default emoji")
@@ -144,7 +146,7 @@ class ReactionRolesCog(commands.Cog):
 
 
 
-    @app_commands.command(name="reactionroleembed", description="View or edit embed of a reaction role template.")
+    @reactionrole.command(name="embed", description="View or edit embed of a reaction role template.")
     @app_commands.autocomplete(name=template_name_autocomplete)
     @app_commands.checks.has_permissions(manage_roles=True)
     # @app_commands.describe(name="Template name", title="New embed title", color="New embed color in HEX")
@@ -199,7 +201,7 @@ class ReactionRolesCog(commands.Cog):
 
 
 
-    @app_commands.command(name="reactionroledeploy", description="Deploy a reaction role template to a channel.")
+    @reactionrole.command(name="deploy", description="Deploy a reaction role template to a channel.")
     @app_commands.autocomplete(name=template_name_autocomplete)
     @app_commands.checks.has_permissions(manage_roles=True)
     # @app_commands.describe(name="Template name", channel="Optional channel to send to")

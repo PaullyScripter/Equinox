@@ -10,7 +10,10 @@ class ModerationCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="slowmode", description="Set slowmode for current channel. (Manage channels required)")
+    channel = app_commands.Group(name="channel", description="Channel management commands")
+    user = app_commands.Group(name="user", description="User management commands")
+
+    @channel.command(name="slowmode", description="Set slowmode for current channel. (Manage channels required)")
     @app_commands.checks.cooldown(1, 10, key=lambda i: (i.user.id))
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.checks.bot_has_permissions(manage_channels=True)
@@ -31,7 +34,7 @@ class ModerationCog(commands.Cog):
         await interaction.response.send_message(embed=discord.Embed(title=f"Sucessfully set {interaction.channel} slowmode to {time}", color=0xffffff))
 
 
-    @app_commands.command(name="lockdown", description="Lockdown a channel, not allowing members to chat. (Manage channels required)")
+    @channel.command(name="lockdown", description="Lockdown a channel, not allowing members to chat. (Manage channels required)")
     @app_commands.checks.cooldown(1, 10, key=lambda i: (i.user.id))
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
@@ -40,7 +43,7 @@ class ModerationCog(commands.Cog):
       await interaction.response.send_message(embed=discord.Embed(title=f"Successfully lockdown {interaction.channel.mention}", color=0xffffff))
 
 
-    @app_commands.command(name="unlockdown", description="Unlockdown a channel, allows members to chat. (Manage channels required)")
+    @channel.command(name="unlockdown", description="Unlockdown a channel, allows members to chat. (Manage channels required)")
     @app_commands.checks.cooldown(1, 10, key=lambda i: (i.user.id))
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
@@ -49,7 +52,7 @@ class ModerationCog(commands.Cog):
       await interaction.response.send_message(embed=discord.Embed(title=f"Successfully unlock {interaction.channel.mention}", color=0xffffff))
 
 
-    @app_commands.command(name="private", description="Private a channel, not allowing members to see. (Manage channels required)")
+    @channel.command(name="private", description="Private a channel, not allowing members to see. (Manage channels required)")
     @app_commands.checks.cooldown(1, 10, key=lambda i: (i.user.id))
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
@@ -58,7 +61,7 @@ class ModerationCog(commands.Cog):
       await interaction.response.send_message(embed=discord.Embed(title=f"Successfully private {interaction.channel.mention}", color=0xffffff))
 
 
-    @app_commands.command(name="unprivate", description="Unprivate a channel, allows members to see. (Manage channels required)")
+    @channel.command(name="unprivate", description="Unprivate a channel, allows members to see. (Manage channels required)")
     @app_commands.checks.cooldown(1, 10, key=lambda i: (i.user.id))
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.checks.bot_has_permissions(manage_roles=True)
@@ -67,7 +70,7 @@ class ModerationCog(commands.Cog):
       await interaction.response.send_message(embed=discord.Embed(title=f"Successfully unprivate {interaction.channel.mention}", color=0xffffff))
 
 
-    @app_commands.command(name="kick", description="Kick a member. (Kick members required)")
+    @user.command(name="kick", description="Kick a member. (Kick members required)")
     @app_commands.checks.cooldown(1, 10, key=lambda i: (i.user.id))
     @app_commands.checks.has_permissions(kick_members=True)
     @app_commands.checks.bot_has_permissions(kick_members=True)
@@ -85,7 +88,7 @@ class ModerationCog(commands.Cog):
           await interaction.response.send_message(embed=discord.Embed(title=f"Successfully kicked {member.name}", description=f"**Reason:** {reason}", color=0xffffff))
 
 
-    @app_commands.command(name="unban", description="Unban a user. (Ban members required)")
+    @user.command(name="unban", description="Unban a user. (Ban members required)")
     @app_commands.checks.cooldown(1, 10, key=lambda i: (i.user.id))
     @app_commands.checks.has_permissions(ban_members=True)
     @app_commands.checks.bot_has_permissions(ban_members=True)
@@ -104,7 +107,7 @@ class ModerationCog(commands.Cog):
         await interaction.response.send_message(embed=discord.Embed(title=f"Successfully unban {user}!", color=0xffffff))
 
 
-    @app_commands.command(name="ban", description="Ban a member. (Ban members required)")
+    @user.command(name="ban", description="Ban a member. (Ban members required)")
     @app_commands.checks.cooldown(1, 10, key=lambda i: (i.user.id))
     @app_commands.checks.has_permissions(ban_members=True)
     @app_commands.checks.bot_has_permissions(ban_members=True)
@@ -128,6 +131,22 @@ class ModerationCog(commands.Cog):
           msg = await interaction.followup.send(embed=discord.Embed(title=f"Successfully banned {member.name}", description=f"**Reason:** {reason}", color=0xffffff), view=view)
           view.message = msg
 
+
+
+    @channel.command(name="clone", description="Clone current channel. (Manage channels required)")
+    @app_commands.checks.cooldown(1, 10, key=lambda i: (i.user.id))
+    @app_commands.checks.has_permissions(manage_channels=True)
+    @app_commands.checks.bot_has_permissions(manage_channels=True)
+    async def clone(self, interaction: discord.Interaction, channel: Optional[discord.TextChannel]):
+      from state import CloneButton
+      await interaction.response.defer()
+      if channel == None:
+        channel = interaction.channel
+      view = CloneButton(interaction.user.id, channel)
+      embed = discord.Embed(title="Cloning Caution ⚠️", description="```diff\nThe clone command allows you to either:\n+ Clone and delete channel\nor\n- Clone channel only\n```", color=0xffffff)
+      embed.set_footer(text=f"Issued by {interaction.user} | Ignore to cancel", icon_url=interaction.user.avatar)
+      msg = await interaction.followup.send(interaction.user.mention, embed=embed, view=view)
+      view.message = msg
 
 
 async def setup(bot):

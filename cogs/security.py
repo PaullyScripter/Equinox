@@ -12,9 +12,12 @@ class SecurityCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="auditlogsetup", description="Enable or disable audit logging.")
-    # @app_commands.describe(state="Turn audit logging on or off")
-    async def auditlogsetup(self, interaction: discord.Interaction, state: Literal["on", "off"]):
+    scam = app_commands.Group(name="scam", description="Scam shield commands")
+    auditlog = app_commands.Group(name="auditlog", description="Audit log commands")
+    codehelper = app_commands.Group(name="codehelper", description="Code helper commands")
+
+    @auditlog.command(name="toggle", description="Enable or disable audit logging.")
+    async def auditlog_toggle(self, interaction: discord.Interaction, state: Literal["on", "off"]):
         from state import load_audit_config, save_audit_config
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("You need admin permissions.", ephemeral=True)
@@ -38,9 +41,8 @@ class SecurityCog(commands.Cog):
         )
 
 
-    @app_commands.command(name="auditlogchannel", description="Set a channel to receive audit log entries.")
-    # @app_commands.describe(channel="Channel to send audit logs to")
-    async def auditlogchannel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+    @auditlog.command(name="set", description="Set a channel to receive audit log entries.")
+    async def auditlog_set(self, interaction: discord.Interaction, channel: discord.TextChannel):
         from state import load_audit_config, save_audit_config
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("You need admin permissions.", ephemeral=True)
@@ -64,9 +66,8 @@ class SecurityCog(commands.Cog):
         )
 
 
-    @app_commands.command(name="auditlogdownload", description="Download server audit logs for the past X days.")
-    # @app_commands.describe(duration="Number of days (1-7)")
-    async def auditlogdownload(self, interaction: discord.Interaction, duration: app_commands.Range[int, 1, 7]):
+    @auditlog.command(name="view", description="Download server audit logs for the past X days.")
+    async def auditlog_view(self, interaction: discord.Interaction, duration: app_commands.Range[int, 1, 7]):
         from state import load_audit_config, read_audit_log
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("You need admin permissions.", ephemeral=True)
@@ -129,18 +130,18 @@ class SecurityCog(commands.Cog):
 
 
 
-    @app_commands.command(name="scam_enable", description="Enable Anti-Scam in this channel (log channel required)")
+    @scam.command(name="enable", description="Enable Anti-Scam in this channel (log channel required)")
     async def scam_enable(self, interaction: discord.Interaction):
         from state import COLOR_OK, admin_or_manage_guild, embed_basic, get_guild_cfg, update_guild_cfg
         if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
         cfg = get_guild_cfg(interaction.guild_id)
-        if not cfg.get("log_channel_id"): return await interaction.response.send_message("Set a **log channel** first with `/set_log_channel`.", ephemeral=True)
+        if not cfg.get("log_channel_id"): return await interaction.response.send_message("Set a **log channel** first with `/scam log`.", ephemeral=True)
         chans = set(cfg.get("scam_channels") or []); chans.add(interaction.channel_id)
         update_guild_cfg(interaction.guild_id, scam_channels=sorted(chans))
         await interaction.response.send_message(embed=embed_basic("Scam Shield Enabled", f"Active in {interaction.channel.mention}", COLOR_OK), ephemeral=True)
 
 
-    @app_commands.command(name="scam_disable", description="Disable Anti-Scam in this channel")
+    @scam.command(name="disable", description="Disable Anti-Scam in this channel")
     async def scam_disable(self, interaction: discord.Interaction):
         from state import COLOR_WARN, admin_or_manage_guild, embed_basic, get_guild_cfg, update_guild_cfg
         if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
@@ -150,7 +151,7 @@ class SecurityCog(commands.Cog):
         await interaction.response.send_message(embed=embed_basic("Scam Shield Disabled", f"Disabled in {interaction.channel.mention}", COLOR_WARN), ephemeral=True)
 
 
-    @app_commands.command(name="codehelper_enable", description="Enable Inline Code Helper in this channel")
+    @codehelper.command(name="enable", description="Enable Inline Code Helper in this channel")
     async def codehelper_enable(self, interaction: discord.Interaction):
         from state import COLOR_OK, admin_or_manage_guild, embed_basic, get_guild_cfg, update_guild_cfg
         if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
@@ -160,7 +161,7 @@ class SecurityCog(commands.Cog):
         await interaction.response.send_message(embed=embed_basic("Code Helper Enabled", f"Active in {interaction.channel.mention}", COLOR_OK), ephemeral=True)
 
 
-    @app_commands.command(name="codehelper_disable", description="Disable Inline Code Helper in this channel")
+    @codehelper.command(name="disable", description="Disable Inline Code Helper in this channel")
     async def codehelper_disable(self, interaction: discord.Interaction):
         from state import COLOR_WARN, admin_or_manage_guild, embed_basic, get_guild_cfg, update_guild_cfg
         if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
@@ -170,9 +171,8 @@ class SecurityCog(commands.Cog):
         await interaction.response.send_message(embed=embed_basic("Code Helper Disabled", f"Disabled in {interaction.channel.mention}", COLOR_WARN), ephemeral=True)
 
 
-    @app_commands.command(name="set_log_channel", description="Set a channel for scam logs (mandatory for Scam Shield)")
-    # @app_commands.describe(channel="Select a channel to receive scam logs")
-    async def set_log_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+    @scam.command(name="log", description="Set a channel for scam logs (mandatory for Scam Shield)")
+    async def scam_log(self, interaction: discord.Interaction, channel: discord.TextChannel):
         from state import COLOR_OK, admin_or_manage_guild, embed_basic, update_guild_cfg
         if not admin_or_manage_guild(interaction): return await interaction.response.send_message("Need **Manage Server** or **Admin**.", ephemeral=True)
         update_guild_cfg(interaction.guild_id, log_channel_id=channel.id)
@@ -184,8 +184,7 @@ class SecurityCog(commands.Cog):
 
                      
 
-    @app_commands.command(name="scan_test", description="Test the scam scanner against custom text")
-    # @app_commands.describe(text="The text to scan (paste your message here)")
+    @scam.command(name="test", description="Test the scam scanner against custom text")
     async def scan_test(self, interaction: discord.Interaction, text: str):
         from state import COLOR_INFO, embed_basic, extract_domains, get_guild_cfg, scan_message_for_scams, compute_scan_confidence
         cfg = get_guild_cfg(interaction.guild_id)
@@ -205,7 +204,7 @@ class SecurityCog(commands.Cog):
         await interaction.response.send_message(embed=e, ephemeral=True)
 
 
-    @app_commands.command(name="scam_stats", description="View scam pattern confidence & feedback stats")
+    @scam.command(name="stats", description="View scam pattern confidence & feedback stats")
     async def scam_stats(self, interaction: discord.Interaction):
         from state import COLOR_INFO, embed_basic, load_feedback_stats
         stats = load_feedback_stats()
@@ -236,7 +235,7 @@ class SecurityCog(commands.Cog):
         await interaction.response.send_message(embed=e, ephemeral=True)
 
 
-    @app_commands.command(name="debug_safety", description="Diagnose readiness & config")
+    @scam.command(name="debug", description="Diagnose readiness & config")
     async def debug_safety(self, interaction: discord.Interaction):
         from state import COLOR_INFO, embed_basic, get_guild_cfg
         cfg = get_guild_cfg(interaction.guild_id)
@@ -252,8 +251,8 @@ class SecurityCog(commands.Cog):
         await interaction.response.send_message(embed=embed_basic("Debug", "\n".join(lines), COLOR_INFO), ephemeral=True)
 
 
-    @app_commands.command(name="whitelisted_phrase",
-                         description="List, inspect, add, or remove whitelisted phrases (logged via 'Not a Scam'). Admin only.")
+    @scam.command(name="phrase",
+                  description="List, inspect, add, or remove whitelisted phrases (logged via 'Not a Scam'). Admin only.")
     # @app_commands.describe(phrase="Optional phrase to inspect/add/remove (normalization applied)", action="Optional: add or remove the phrase")
     async def whitelisted_phrase(
         self,
@@ -350,7 +349,7 @@ class SecurityCog(commands.Cog):
         return await interaction.response.send_message(embed=e, ephemeral=True)
 
 
-    @app_commands.command(name="scam_whitelist", description="Add/remove users or roles from the scam shield whitelist, or list all")
+    @scam.command(name="whitelist", description="Add/remove users or roles from the scam shield whitelist, or list all")
     # @app_commands.describe(user="Optional user to add/remove from the whitelist", role="Optional role to add/remove from the whitelist", action="Choose add or remove (optional)")
     async def scam_whitelist(
         self,
@@ -427,7 +426,7 @@ class SecurityCog(commands.Cog):
 
                                                                      
 
-    @app_commands.command(name="status", description="Show current security & code-helper configuration for this server")
+    @scam.command(name="status", description="Show current security & code-helper configuration for this server")
     async def status(self, interaction: discord.Interaction):
         from state import get_guild_cfg, embed_basic, COLOR_INFO
         cfg = get_guild_cfg(interaction.guild_id)

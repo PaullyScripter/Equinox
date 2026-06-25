@@ -15,12 +15,13 @@ class GiveawayCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="giveaway_manage", description="Reroll or finalize a giveaway by message ID.")
+    giveaway = app_commands.Group(name="giveaway", description="Giveaway commands")
+
+    @giveaway.command(name="manage", description="Reroll or finalize a giveaway by message ID.")
     @app_commands.choices(action=[
         app_commands.Choice(name="Reroll", value="reroll"),
         app_commands.Choice(name="Finalize", value="finalize"),
     ])
-    # @app_commands.describe(message_id="The message ID of the giveaway")
     async def giveaway_manage(
         self,
         interaction: discord.Interaction,
@@ -64,7 +65,7 @@ class GiveawayCog(commands.Cog):
 
 
 
-    @app_commands.command(name="giveaway_console", description="View all giveaways in this server.")
+    @giveaway.command(name="console", description="View all giveaways in this server.")
     async def giveaway_console(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
@@ -170,10 +171,9 @@ class GiveawayCog(commands.Cog):
         view.message = msg
 
 
-    @app_commands.command(name='giveaway', description='Create a giveaway')
-    # @app_commands.describe(duration="Giveaway's duration (e.g., 1s, 2m, 3h, 4d)", prize="Giveaway's prize", hosts="Comma-separated list of host IDs (userID, roleID)")
+    @giveaway.command(name='create', description='Create a giveaway')
     @app_commands.checks.has_permissions(manage_messages=True)
-    async def giveaway(self, interaction: discord.Interaction, duration: str, prize: str, hosts: str = None):
+    async def giveaway_create(self, interaction: discord.Interaction, duration: str, prize: str, hosts: str = None):
         from state import is_premium, BuyPremium
         await interaction.response.defer()
 
@@ -189,7 +189,7 @@ class GiveawayCog(commands.Cog):
                 title="You are being restricted",
                 description="Normal servers can only host **3 active giveaways**.\n"
                             "The server owner is **not a premium user**.\n\n"
-                            "Consider finalizing an existing giveaway using </giveaway_manage:1370458427100368898>\n"
+                            "Consider finalizing an existing giveaway using `/giveaway manage`\n"
                             "or upgrade to premium.",
                 color=0xffffff
             )
