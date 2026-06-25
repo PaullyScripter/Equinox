@@ -1950,8 +1950,10 @@ class mySelect(View):
             await interaction.response.defer()
 
     async def on_timeout(self) -> None:
-        help_select = discord.utils.get(self.children, placeholder="Choose a catergory")
-        help_select.disabled = True
+        for child in self.children:
+            if isinstance(child, discord.ui.Select):
+                child.disabled = True
+                break
         await self.message.edit(view=self)
 
 class CurrencyView(ui.View):
