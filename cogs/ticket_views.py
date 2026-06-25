@@ -12,6 +12,16 @@ def load_active_tickets():
     return db.load_active_tickets()
 
 
+def _lookup_ticket_owner(channel_id: int, guild_id: int) -> int | None:
+    active = load_active_tickets()
+    guild_key = str(guild_id)
+    if guild_key in active:
+        for uid_str, channel_ids in active[guild_key].items():
+            if channel_id in channel_ids:
+                return int(uid_str)
+    return None
+
+
 def save_active_tickets(data):
     db.save_active_tickets(data)
 
@@ -644,11 +654,13 @@ if(element.classList.contains('chatlog__markdown-spoiler--hidden')){{event.preve
 async def generate_transcript(channel, reason, closed_by_name, closed_by_id):
     os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
 
-    uid_str = channel.name.rsplit("-", 1)[-1]
+    creator_id = _lookup_ticket_owner(channel.id, channel.guild.id)
     creator_name = "Unknown"
-    creator_id = 0
-    if uid_str.isdigit():
-        creator_id = int(uid_str)
+    if creator_id is None:
+        uid_str = channel.name.rsplit("-", 1)[-1]
+        if uid_str.isdigit():
+            creator_id = int(uid_str)
+    if creator_id is not None:
         member = channel.guild.get_member(creator_id)
         if member:
             creator_name = str(member)
@@ -849,12 +861,22 @@ class CloseReasonModal(ui.Modal):
         channel = interaction.channel
         guild_id = interaction.guild.id
 
-        uid_str = channel.name.rsplit("-", 1)[-1]
-        if not uid_str.isdigit():
+        active = load_active_tickets()
+        uid = None
+        guild_key = str(guild_id)
+        cid = channel.id
+        if guild_key in active:
+            for uid_str, channel_ids in active[guild_key].items():
+                if cid in channel_ids:
+                    uid = int(uid_str)
+                    break
+        if uid is None:
+            uid_str = channel.name.rsplit("-", 1)[-1]
+            if uid_str.isdigit():
+                uid = int(uid_str)
+        if uid is None:
             await interaction.followup.send("Could not identify ticket owner.", ephemeral=True)
             return
-
-        uid = int(uid_str)
         closed_by_name = str(interaction.user)
         transcript_path, participants = await generate_transcript(channel, reason, closed_by_name, interaction.user.id)
 
@@ -977,8 +999,8 @@ class TicketChannelView(discord.ui.View):
     @discord.ui.button(label="Claim", style=discord.ButtonStyle.green, custom_id="claimticket")
     async def claim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel = interaction.channel
-        uid_str = channel.name.rsplit("-", 1)[-1]
-        if uid_str.isdigit() and int(uid_str) == interaction.user.id:
+        owner_id = _lookup_ticket_owner(channel.id, channel.guild.id)
+        if owner_id == interaction.user.id:
             await interaction.response.send_message("You cannot claim your own ticket.", ephemeral=True)
             return
 
@@ -1096,8 +1118,8 @@ class TicketChannelView(discord.ui.View):
             await interaction.response.send_message("Only closed tickets can be deleted.", ephemeral=True)
             return
 
-        uid_str = channel.name.rsplit("-", 1)[-1]
-        if uid_str.isdigit() and int(uid_str) == interaction.user.id:
+        owner_id = _lookup_ticket_owner(channel.id, channel.guild.id)
+        if owner_id == interaction.user.id:
             await interaction.response.send_message("You cannot delete your own ticket.", ephemeral=True)
             return
 

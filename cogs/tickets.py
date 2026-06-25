@@ -17,7 +17,9 @@ class TicketsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="make_ticket", description="Make a ticket system. (Administrator required)")
+    ticket = app_commands.Group(name="ticket", description="Ticket system commands")
+
+    @ticket.command(name="create", description="Make a ticket system. (Administrator required)")
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
     @app_commands.checks.bot_has_permissions(manage_channels=True, manage_roles=True)
@@ -132,7 +134,7 @@ class TicketsCog(commands.Cog):
         user_role_ids = {r.id for r in user.roles}
         return bool(ticket_role_ids & user_role_ids)
 
-    @app_commands.command(name="addmember", description="Add a member to the ticket.")
+    @ticket.command(name="add", description="Add a member to the ticket.")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
     @app_commands.checks.bot_has_permissions(manage_channels=True)
     async def addmember(self, interaction: discord.Interaction, member: discord.Member):
@@ -151,7 +153,7 @@ class TicketsCog(commands.Cog):
             embed=discord.Embed(title=f"Successfully added {member.mention} to {interaction.channel.mention}", color=0xffffff)
         )
 
-    @app_commands.command(name="revmember", description="Remove a member from a ticket.")
+    @ticket.command(name="remove", description="Remove a member from a ticket.")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
     @app_commands.checks.bot_has_permissions(manage_channels=True)
     async def revmember(self, interaction: discord.Interaction, member: discord.Member):

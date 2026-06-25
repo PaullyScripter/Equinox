@@ -420,11 +420,9 @@ class GachaCog(commands.Cog):
         if self.flush_task and not self.flush_task.done():
             self.flush_task.cancel()
 
-    # ──────────────────────────────────────────────────────
-    #  /roll
-    # ──────────────────────────────────────────────────────
+    gacha = app_commands.Group(name="gacha", description="Gacha game commands")
 
-    @app_commands.command(name="roll", description="Gacha game")
+    @gacha.command(name="roll", description="Gacha game")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
     @app_commands.choices(item=[
         discord.app_commands.Choice(name='Fortune Drink', value=1),
@@ -532,7 +530,7 @@ class GachaCog(commands.Cog):
     #  /flex
     # ──────────────────────────────────────────────────────
 
-    @app_commands.command(name="flex", description="Show a member's gacha stats")
+    @gacha.command(name="flex", description="Show a member's gacha stats")
     @app_commands.checks.cooldown(1, 2, key=lambda i: (i.user.id))
     async def flex(self, interaction: discord.Interaction, member: Optional[discord.Member]):
         if member is None:
@@ -544,7 +542,7 @@ class GachaCog(commands.Cog):
     #  /inventory
     # ──────────────────────────────────────────────────────
 
-    @app_commands.command(name="inventory", description="Show a member's inventory")
+    @gacha.command(name="inventory", description="Show a member's inventory")
     @app_commands.checks.cooldown(1, 2, key=lambda i: (i.user.id))
     @app_commands.choices(type=[
         discord.app_commands.Choice(name='Rolls', value=1),
@@ -640,7 +638,7 @@ class GachaCog(commands.Cog):
     #  /shop
     # ──────────────────────────────────────────────────────
 
-    @app_commands.command(name="shop", description="Show the gacha shop")
+    @gacha.command(name="shop", description="Show the gacha shop")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
     async def shop(self, interaction: discord.Interaction):
         embed = discord.Embed(
@@ -666,7 +664,7 @@ class GachaCog(commands.Cog):
     #  /daily
     # ──────────────────────────────────────────────────────
 
-    @app_commands.command(name="daily", description="Daily chest of potions")
+    @gacha.command(name="daily", description="Daily chest of potions")
     @app_commands.checks.cooldown(1, 86400, key=lambda i: (i.user.id))
     async def daily(self, interaction: discord.Interaction):
         from state import BuyPremium, is_premium, refresh
@@ -713,7 +711,7 @@ class GachaCog(commands.Cog):
     #  /craft
     # ──────────────────────────────────────────────────────
 
-    @app_commands.command(name="craft", description="Craft an item")
+    @gacha.command(name="craft", description="Craft an item")
     @app_commands.checks.cooldown(1, 10, key=lambda i: (i.user.id))
     @app_commands.choices(item=[
         discord.app_commands.Choice(name='Fortune Drink', value=1),

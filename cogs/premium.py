@@ -14,14 +14,16 @@ class PremiumCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="redeem", description="Redeem a premium code")
+    account = app_commands.Group(name="account", description="Account management commands")
+
+    @account.command(name="redeem", description="Redeem a premium code")
     async def redeem(self, interaction: discord.Interaction):
         from state import Mymodal
         await interaction.response.send_modal(Mymodal())
 
 
 
-    @app_commands.command(name="login", description="Login to your database using email")
+    @account.command(name="login", description="Login to your database using email")
     @app_commands.checks.cooldown(1, 30, key=lambda i: (i.user.id))
     async def login(self, interaction: discord.Interaction):
       from state import LoginModal
@@ -30,7 +32,7 @@ class PremiumCog(commands.Cog):
       await interaction.response.send_modal(LoginModal())
 
 
-    @app_commands.command(name="reset", description="Resets your databases (24h cooldown)")
+    @account.command(name="reset", description="Resets your databases (24h cooldown)")
     @app_commands.checks.cooldown(1, 60, key=lambda i: (i.user.id))
     async def reset(self, interaction: discord.Interaction):
         from state import ResetButton
@@ -74,9 +76,9 @@ class PremiumCog(commands.Cog):
 
 
 
-    @app_commands.command(name="account", description="View your account status")
+    @account.command(name="info", description="View your account status")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
-    async def account(self, interaction: discord.Interaction):
+    async def account_info(self, interaction: discord.Interaction):
         from cogs.gacha import _get_user_full
         data = await _get_user_full(interaction.user.id)
         if data is None:
@@ -116,7 +118,7 @@ class PremiumCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
 
-    @app_commands.command(name="unlink", description="Unlink your email from the bot")
+    @account.command(name="unlink", description="Unlink your email from the bot")
     @app_commands.checks.cooldown(1, 30, key=lambda i: (i.user.id))
     async def unlink(self, interaction: discord.Interaction):
         from cogs.gacha import _get_user_full, _hash_email
@@ -200,22 +202,6 @@ class PremiumCog(commands.Cog):
 
 
 
-    @app_commands.command(name="is_premium", description="Check your premium status")
-    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.user.id))
-    async def i_spremium(self, interaction: discord.Interaction, member: Optional[discord.Member] = None):
-        from state import is_premium
-        target = interaction.user
-        active, tier, expires = await is_premium(target.id)
-
-        if active:
-            msg = f"✅ {target} is premium ({tier})"
-            if expires:
-                msg += f"\nExpires at: `{expires}`"
-            else:
-                msg += "\nExpires: `never`"
-            await interaction.response.send_message(msg)
-        else:
-            await interaction.response.send_message(f"❌ {target} is not premium.")
 
 
     @app_commands.command(name="prem_nsfw", description="Displays various catergories of nsfw contents (for premium users)")

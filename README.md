@@ -38,156 +38,151 @@ Discord bot built with discord.py. Provides moderation, security, utility, gacha
 ### Scam Shield & Security
 | Command | Description | Required Permissions |
 |---|---|---|
-| `/scam_enable` | Enable Anti-Scam in current channel | Manage Server / Administrator |
-| `/scam_disable` | Disable Anti-Scam in current channel | Manage Server / Administrator |
-| `/set_log_channel` | Set channel for scam alerts | Manage Server / Administrator |
-| `/scan_test` | Test the scam scanner against custom text with confidence analysis | Anyone |
-| `/scam_stats` | View per-pattern confidence bars, TP/FP counts, and overall accuracy | Anyone |
-| `/scam_whitelist` | Add/remove users or roles from the scam shield whitelist, or list all | Manage Server / Administrator |
-| `/whitelisted_phrase` | List, inspect, add, or remove whitelisted phrases (logged via Not a Scam feedback) | Manage Server / Administrator |
-| `/block_ad` | Block Discord invite links (discord.gg, discord.com/invite) as spam | Administrator |
-| `/youngest` | Show the youngest account and list all accounts younger than a duration (e.g. 1y, 30d, 1m) | Anyone |
-| `/status` | Show current security and code-helper configuration for this server | Anyone |
-| `/debug_safety` | Diagnose security readiness (intents, config, log channel) | Anyone |
-| Review Content (context menu) | Right-click any message → Apps → Review Content to scan and mark as scam/not-scam | Manage Server / Administrator |
-| `/auditlogsetup` | Toggle audit logging on or off | Administrator |
-| `/auditlogchannel` | Set the channel for audit log entries | Administrator |
-| `/auditlogdownload` | Download server audit logs (1-7 days) | Administrator |
-| `/codehelper_enable` | Enable inline code helper in current channel | Manage Server / Administrator |
-| `/codehelper_disable` | Disable inline code helper in current channel | Manage Server / Administrator |
-| `/lint` | Check Python code for syntax errors (paste code in the command) | Anyone |
+| `/scam enable` | Enable Anti-Scam in current channel | Manage Server / Administrator |
+| `/scam disable` | Disable Anti-Scam in current channel | Manage Server / Administrator |
+| `/scam log` | Set channel for scam alerts | Manage Server / Administrator |
+| `/scam test` | Test the scam scanner against custom text | Anyone |
+| `/scam stats` | View per-pattern confidence stats | Anyone |
+| `/scam debug` | Diagnose security readiness | Anyone |
+| `/scam phrase` | Manage whitelisted phrases | Manage Server / Administrator |
+| `/scam whitelist` | Manage scam shield whitelist | Manage Server / Administrator |
+| `/scam status` | Show current security configuration | Anyone |
+| `/block_ad` | Block Discord invite links as spam | Administrator |
+| `/youngest` | Show youngest accounts younger than a duration | Anyone |
+| `/auditlog toggle` | Toggle audit logging on or off | Administrator |
+| `/auditlog set` | Set channel for audit log entries | Administrator |
+| `/auditlog view` | Download server audit logs (1-7 days) | Administrator |
+| `/codehelper enable` | Enable inline code helper in current channel | Manage Server / Administrator |
+| `/codehelper disable` | Disable inline code helper in current channel | Manage Server / Administrator |
+| `/lint` | Check Python code for syntax errors | Anyone |
+| Review Content (context menu) | Right-click → Apps → Review Content | Manage Server / Administrator |
 
 ### Gacha & Economy
 | Command | Description | Permissions |
 |---|---|---|
-| `/roll` | Roll for items across 10 rarity tiers (1/2 to 1/10,000) | Anyone |
-| `/flex` | Display a member's gacha statistics | Anyone |
-| `/inventory` | View your item inventory | Anyone |
-| `/shop` | Browse the gacha shop | Anyone |
-| `/daily` | Claim daily chest of potions | Anyone |
-| `/craft` | Craft items from your inventory with predefined recipes | Anyone |
+| `/gacha roll` | Roll for items across 10 rarity tiers | Anyone |
+| `/gacha flex` | Display a member's gacha statistics | Anyone |
+| `/gacha inventory` | View a member's item inventory | Anyone |
+| `/gacha shop` | Browse the gacha shop | Anyone |
+| `/gacha craft` | Craft items from your inventory | Anyone |
+| `/gacha daily` | Claim daily chest of potions | Premium |
+| Gacha Stats (context menu) | Right-click a member → Apps → Gacha Stats | Anyone |
 
-### Premium & Subscriptions
+### Account & Premium
 | Command | Description | Permissions |
 |---|---|---|
 | `/premium` | Check your premium subscription status | Anyone |
-| `/is_premium` | Check premium status for yourself or another member | Anyone |
-| `/redeem` | Redeem a premium code | Anyone |
-| `/login` | Log in to your gacha database using email verification | Anyone |
-| `/account` | View your account status (linked email, eligibility) | Anyone |
-| `/unlink` | Unlink your email from the bot with verification | Anyone |
-| `/reset` | Reset your gacha data (24h cooldown, requires email confirmation) | Anyone |
-| `/prem_nsfw` | NSFW content (premium users only) | Premium |
 | `/nsfw` | NSFW content (rate-limited for free users) | Anyone |
+| `/prem_nsfw` | NSFW content (premium users only) | Premium |
+| `/account info` | View your account status | Anyone |
+| `/account login` | Log in to your gacha database using email | Anyone |
+| `/account unlink` | Unlink your email from the bot | Anyone |
+| `/account redeem` | Redeem a premium code | Anyone |
+| `/account reset` | Reset your gacha data (24h cooldown) | Anyone |
 | `/email` | Send an email via the bot | Developer |
 | `/gen_code` | Generate premium codes | Developer |
 | `/remove_premium` | Remove premium from a user | Developer |
-| `/export_codes` | Export premium codes to .txt for SellAuth | Developer |
-| `/stats` | View bot statistics (guilds, users, commands, uptime) | Developer |
+| `/export_codes` | Export premium codes to .txt | Developer |
+| `/stats` | View bot statistics | Developer |
 
-### Tickets
+### Tickets & Verification
 | Command | Description | Permissions |
 |---|---|---|
-| `/make_ticket` | Create a ticket system with a custom panel, category, and support role | Administrator |
-| `/addmember` | Add a member to an open ticket | Ticket permissions |
-| `/revmember` | Remove a member from a ticket | Ticket permissions |
+| `/ticket create` | Create a ticket system | Administrator |
+| `/ticket add` | Add a member to a ticket | Ticket permissions |
+| `/ticket remove` | Remove a member from a ticket | Ticket permissions |
+| `/make_verify` | Create a captcha-based verification system | Administrator / Owner |
 
 ### Giveaways
 | Command | Description | Permissions |
 |---|---|---|
-| `/giveaway` | Create a giveaway with prize, winners, duration, and host roles | Anyone |
-| `/giveaway_manage` | Reroll or finalize a giveaway by message ID | Host / Host Role |
-| `/giveaway_console` | View all active giveaways in the server with pagination | Host / Host Role |
+| `/giveaway create` | Create a giveaway | Manage Messages |
+| `/giveaway manage` | Reroll or finalize a giveaway | Host / Host Role |
+| `/giveaway console` | View all active giveaways | Host / Host Role |
 
-### Verification
+### Activity & Presence
 | Command | Description | Permissions |
 |---|---|---|
-| `/make_verify` | Create a captcha-based verification system with role assignment | Administrator / Server Owner |
-
-### Presence & Activity
-| Command | Description | Permissions |
-|---|---|---|
-| `/server_member_activity` | View members by presence status (Online, DND, Idle, Offline) or summary stats | Anyone |
-| `/server_member_stats` | Advanced member analytics: overview, top roles, and age distribution graph | Manage Server / Administrator |
-| `/top_games` | Show the most played games in the server (top 10) | Anyone |
-| `/now_playing` | View what a user is currently playing or doing (games, Spotify, custom status) | Anyone |
-| `/role_presence_stats` | View presence breakdown (online/idle/dnd/offline) for a specific role | Anyone |
-| `/privacy` | Opt out of presence tracking, status tracking, or both | Anyone |
+| `/activity status` | View members by presence status | Anyone |
+| `/activity games` | Show the top played games | Anyone |
+| `/activity now` | View what a user is currently doing | Anyone |
+| `/activity role` | View presence breakdown for a role | Anyone |
+| `/activity privacy` | Manage privacy and tracking settings | Anyone |
+| `/activity members` | Advanced member analytics | Manage Server / Administrator |
 
 ### Automation
 | Command | Description | Permissions |
 |---|---|---|
-| `/autoping_whitelist` | Add, remove, or view auto-ping channels for new members | Manage Messages |
-| `/autorole` | Set, remove, or view auto-role configuration for new members | Manage Roles |
+| `/autoping_whitelist` | Manage auto-ping channels | Manage Messages |
+| `/autorole` | Manage auto-role configuration | Manage Roles |
 
 ### Reaction Roles
 | Command | Description | Permissions |
 |---|---|---|
-| `/rrgame` | Make a selection role (developer only) | Developer |
-| `/reactionrolesetup` | Create or delete a reaction role template | Manage Roles |
-| `/reactionroleedit` | Add or remove roles from a template | Manage Roles |
-| `/reactionroleembed` | View or edit a template embed's appearance (title, description, color) | Manage Roles |
-| `/reactionroledeploy` | Deploy a reaction role template to a channel | Manage Roles |
+| `/reactionrole game` | Make a selection role | Developer |
+| `/reactionrole template` | Create or delete a template | Manage Roles |
+| `/reactionrole edit` | Add or remove roles from a template | Manage Roles |
+| `/reactionrole embed` | View or edit template embed | Manage Roles |
+| `/reactionrole deploy` | Deploy a template to a channel | Manage Roles |
 
-### Message Counting
+### Messages
 | Command | Description | Permissions |
 |---|---|---|
-| `/messagecounter` | Enable or disable message counting in the server | Administrator |
-| `/messagecount` | View a user's message count | Anyone |
-| `/messagecountleaderboard` | Server message count leaderboard with pagination | Anyone |
-| `/messagecountgive` | Transfer your message count to another user | Anyone |
-| `/messagecountdeduct` | Deduct messages from a user | Administrator |
-| `/messageblacklist` | Add or remove channels from the message counter blacklist | Administrator |
-| `/messageblacklistview` | View blacklisted channels | Anyone |
+| `/messages toggle` | Enable or disable message counting | Administrator |
+| `/messages count` | View a user's message count | Anyone |
+| `/messages leaderboard` | Server message count leaderboard | Anyone |
+| `/messages give` | Transfer messages to another user | Anyone |
+| `/messages deduct` | Deduct messages from a user | Administrator |
+| `/messages blacklist` | Blacklist/unblacklist a channel | Administrator |
+| `/messages blacklist_view` | View blacklisted channels | Anyone |
 
 ### Moderation
 | Command | Description | Permissions |
 |---|---|---|
-| `/purge` | Clear messages (2-50) with optional filters (bots, embeds, users, links) | Manage Messages |
-| `/slowmode` | Set channel slowmode delay (0–21600 seconds) | Manage Channels |
-| `/lockdown` | Lock a channel (prevent members from sending messages and reactions) | Manage Channels |
-| `/unlockdown` | Unlock a previously locked channel | Manage Channels |
-| `/private` | Hide a channel from @everyone | Manage Channels |
-| `/unprivate` | Restore visibility to a hidden channel | Manage Channels |
-| `/kick` | Kick a member from the server (with hierarchy validation) | Kick Members |
-| `/ban` | Ban a member from the server (with unban button) | Ban Members |
-| `/unban` | Unban a user by numeric ID | Ban Members |
+| `/channel lockdown` | Lock a channel | Manage Channels |
+| `/channel unlockdown` | Unlock a channel | Manage Channels |
+| `/channel private` | Hide a channel from @everyone | Manage Channels |
+| `/channel unprivate` | Restore visibility to a channel | Manage Channels |
+| `/channel slowmode` | Set channel slowmode delay | Manage Channels |
+| `/channel clone` | Clone the current channel | Manage Channels |
+| `/user kick` | Kick a member | Kick Members |
+| `/user ban` | Ban a member | Ban Members |
+| `/user unban` | Unban a user by ID | Ban Members |
+| `/purge` | Clear messages with filters | Manage Messages |
 
 ### Utility
 | Command | Description | Permissions |
 |---|---|---|
-| `/help` | Interactive help menu with category dropdown | Anyone |
-| `/serverinfo` | Display detailed server information (owner, boosts, channels, roles) | Anyone |
-| `/userinfo` | Display detailed user information (joined, created, roles, permissions) | Anyone |
-| `/roleinfo` | Display detailed role information (color, position, permissions) | Anyone |
-| `/avatar` | View a user's full-size avatar | Anyone |
-| `/ping` | Check bot latency (WebSocket + REST round-trip) | Anyone |
-| `/invite` | Get bot invite links (admin + limited perms) and support server | Anyone |
-| `/embed` | Visual embed builder with interactive modals (title, desc, fields, author, footer, image, thumbnail, color) | Manage Messages |
-| `/poll` | Start a poll with up to 3 options | Manage Messages |
-| `/clone` | Clone the current channel (name, permissions, topic, NSFW, slowmode) | Manage Channels |
-| `/qrcode` | Generate a QR code from text or URL | Anyone |
-| `/translate` | Translate text to a target language with language selector | Anyone |
-| `/def` | Look up the dictionary definition of a word | Anyone |
-| `/wiki` | Search Wikipedia with category support (Fandom integration) | Anyone |
-| `/daysbetween` | Calculate the number of days between two dates | Anyone |
-| `/timedif` | Calculate the time difference between two message IDs | Anyone |
-| `/steal` | Copy emojis from another server (animated + static supported) | Manage Emojis |
-| `/exchange` | Convert between fiat and cryptocurrencies using real-time ExchangeRate-API rates | Anyone |
-| `/check_tx` | Check blockchain transaction details (BTC, ETH, LTC, DOGE) with confirmation tracking | Anyone |
-| `/graph` | Plot a mathematical function on a graph (with zoom controls) | Anyone |
-| `/drop` | Start a drop game in the current channel (click to claim, random timer) | Anyone |
-| `/update` | Post an Equinox update changelog embed | Developer |
+| `/help` | Interactive help menu | Anyone |
+| `/serverinfo` | Display server information | Anyone |
+| `/userinfo` | Display user information | Anyone |
+| `/roleinfo` | Display role information | Anyone |
+| `/avatar` | View a user's avatar | Anyone |
+| `/ping` | Check bot latency | Anyone |
+| `/invite` | Get bot invite links | Anyone |
+| `/embed` | Visual embed builder | Manage Messages |
+| `/poll` | Start a poll with 3 options | Manage Messages |
+| `/qrcode` | Generate a QR code | Anyone |
+| `/translate` | Translate text | Anyone |
+| `/def` | Dictionary definition of a word | Anyone |
+| `/wiki` | Search Wikipedia | Anyone |
+| `/fandom` | Search Fandom pages | Anyone |
+| `/daysbetween` | Calculate days between dates | Anyone |
+| `/timedif` | Time difference between IDs | Anyone |
+| `/steal` | Copy emojis from another server | Manage Emojis |
+| `/graph` | Plot a mathematical function | Anyone |
+| `/drop` | Start a drop game | Anyone |
+| `/exchange` | Convert fiat ↔ crypto | Anyone |
+| `/check_tx` | Check blockchain transactions | Anyone |
+| `/ask_gemini` | Ask Google Gemini AI | Administrator |
+| `/sync` | Sync slash commands | Bot Owner |
 
-### Gemini AI
+### Context Menus
 | Command | Description | Permissions |
 |---|---|---|
-| `/ask_gemini` | Ask Google Gemini AI any question (with content moderation) | Administrator |
-
-### Sync (Owner)
-| Command | Description | Permissions |
-|---|---|---|
-| `/sync` | Force-sync all slash commands globally | Bot Owner |
+| Translate (right-click message) | Translate a message | Anyone |
+| Review Content (right-click message) | Scan message for scams | Manage Server / Administrator |
+| Gacha Stats (right-click member) | View gacha stats | Anyone |
 
 ---
 
@@ -279,7 +274,7 @@ Equinox/
 - **State Module**: `state.py` is an empty module populated by `main.py` at startup with all shared functions and classes. Cogs import from it via `from state import ...`.
 - **Scam Pipeline**: `on_message` → whitelist check → admin bypass → `scan_message_for_scams` → `compute_scan_confidence` → delete (≥50%) or flag → log embed with `ScamFeedbackView`.
 - **Scam Feedback**: Persistent buttons on all flagged messages. True positives boost pattern weights (+0.1, max 1.0). False positives degrade weights (−0.10, min 0.3) and auto-whitelist domains/phrases.
-- **Command Limit**: Current command count is 97 slash + 3 context menus (Review Content, Translate, Gacha Stats) = 99 (under Discord's 100 limit).
+- **Command Limit**: ~53 slash commands + 3 context menus (Review Content, Translate, Gacha Stats) = ~56 total (well under Discord's 100 limit).
 
 ---
 
