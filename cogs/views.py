@@ -735,7 +735,7 @@ class NumbersButton(discord.ui.View):
             return
         try:
             await self.message.channel.send(f"<@{self.authorid}> ⏰ Verification timed out. Click the button to try again.", delete_after=10)
-        except:
+        except Exception:
             pass
         try:
             await self.message.delete()
@@ -2380,6 +2380,9 @@ class ScamFeedbackView(discord.ui.View):
 
     @discord.ui.button(label="Mark as Scam", style=discord.ButtonStyle.success, custom_id="scamfb:tp")
     async def mark_scam(self, interaction: discord.Interaction, button: discord.ui.Button):
+        perms = interaction.user.guild_permissions
+        if not (perms.administrator or perms.manage_guild):
+            return await interaction.response.send_message("You need **Manage Server** or **Administrator** to use this.", ephemeral=True)
         actions = state.load_actions()
         payload = actions.get(self.action_id)
         if not payload:
@@ -2408,6 +2411,9 @@ class ScamFeedbackView(discord.ui.View):
 
     @discord.ui.button(label="Not a Scam", style=discord.ButtonStyle.danger, custom_id="scamfb:fp")
     async def mark_not_scam(self, interaction: discord.Interaction, button: discord.ui.Button):
+        perms = interaction.user.guild_permissions
+        if not (perms.administrator or perms.manage_guild):
+            return await interaction.response.send_message("You need **Manage Server** or **Administrator** to use this.", ephemeral=True)
         actions = state.load_actions()
         payload = actions.get(self.action_id)
         if not payload:
